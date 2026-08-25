@@ -1966,6 +1966,22 @@ final class RestorePilot_Backup_Migration {
                   <?php echo esc_html__('Password:', 'restorepilot-backup-migration'); ?>
                   <code id="rp-new-admin-password"></code>
                 </p>
+                <?php
+                // The page does not navigate on its own while these are on
+                // screen — a redirect would take a shown-once password away
+                // before it could be copied. That leaves this the only way
+                // onward, so it has to be here: without it the restore ends on
+                // a page with nothing to click, and the "restore completed"
+                // dialog waiting on the next admin request is never reached.
+                ?>
+                <p class="rp-new-admin-continue">
+                  <?php echo esc_html__('Save the login above first. WordPress may ask you to sign in again — the restore replaced the site\'s session data.', 'restorepilot-backup-migration'); ?>
+                </p>
+                <p>
+                  <a class="button button-primary" href="<?php echo esc_url(add_query_arg('tab', 'restore', self::admin_url())); ?>">
+                    <?php echo esc_html__('Continue to RestorePilot', 'restorepilot-backup-migration'); ?>
+                  </a>
+                </p>
               </div>
 
               <div class="rp-advanced rp-disclosure">
