@@ -4285,10 +4285,6 @@ final class RestorePilot_Backup_Migration {
       wp_send_json_error(['message' => __('This restore did not create an admin account to set a password on.', 'restorepilot-backup-migration')], 409);
     }
 
-    // Consumed before the password is applied, so a replayed or duplicated
-    // request cannot reset the account again later.
-    self::update_restore_job($job_id, ['new_admin_user_id' => 0]);
-
     $user = get_user_by('id', $user_id);
     if (!$user) {
       wp_send_json_error(['message' => __('The account this restore created could no longer be found.', 'restorepilot-backup-migration')], 410);
@@ -4301,6 +4297,14 @@ final class RestorePilot_Backup_Migration {
     if ($password === '' || strlen($password) < 8) {
       wp_send_json_error(['message' => __('Choose a password of at least 8 characters.', 'restorepilot-backup-migration')], 400);
     }
+
+    // Consumed here, and only here: every check above has passed and the
+    // password is about to be applied, so a second request finds nothing to
+    // act on. Doing this any earlier spends the pointer on a request that
+    // then fails validation — one mistyped password would permanently take
+    // away the ability to set it, leaving a password reset as the only route
+    // into an account the operator had just been told they were creating.
+    self::update_restore_job($job_id, ['new_admin_user_id' => 0]);
 
     wp_set_password($password, $user_id);
     self::write_log('Applied the chosen password to the restore admin account (username only, never the password): ' . $user->user_login);
