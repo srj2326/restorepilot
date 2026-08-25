@@ -736,7 +736,7 @@
                 return response.json();
               }).then(function (adminJson) {
                 if (adminJson && adminJson.success) {
-                  var who = (adminJson.data && adminJson.data.username) ? adminJson.data.username : '';
+                  var who = (adminJson.data && adminJson.data.email) ? adminJson.data.email : '';
                   setRestoreProgressUi(100, who
                     ? restorePilotData.i18n.adminPasswordSetFor.replace('%s', who)
                     : restorePilotData.i18n.adminPasswordSet, '#2271b1');
@@ -757,21 +757,6 @@
               return;
             }
 
-            if (status.new_admin_credentials && status.new_admin_credentials.username) {
-              var panel = document.getElementById('rp-new-admin-result');
-              var userEl = document.getElementById('rp-new-admin-username');
-              var passEl = document.getElementById('rp-new-admin-password');
-              if (panel && userEl && passEl) {
-                userEl.textContent = status.new_admin_credentials.username;
-                passEl.textContent = status.new_admin_credentials.password;
-                panel.style.display = '';
-                panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-              // Shown once, so don't navigate it away before it can be read —
-              // the normal auto-redirect below only fires when there is
-              // nothing here that would otherwise be lost.
-              return;
-            }
             window.setTimeout(function () {
               window.location.href = restorePilotData.restoreTabUrl;
             }, 1500);
@@ -815,9 +800,6 @@
       var data = new FormData(form);
       data.set('action', 'restorepilot_ajax_restore');
       data.set('_ajax_nonce', restorePilotData.nonce);
-      // Only whether a password was chosen, never the password itself: the
-      // server needs this to know not to generate and display one.
-      data.set('new_admin_custom_password', pendingAdminPassword ? '1' : '');
       fetch(ajaxurl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -897,10 +879,8 @@
     var restoreConfirmNewAdmin = document.getElementById('rp-restore-confirm-new-admin');
     var restoreNewAdminHidden = document.getElementById('rp_create_new_admin_hidden');
     var newAdminFields = document.getElementById('rp-new-admin-fields');
-    var newAdminUsernameInput = document.getElementById('rp-new-admin-username-input');
     var newAdminEmailInput = document.getElementById('rp-new-admin-email-input');
     var newAdminPasswordInput = document.getElementById('rp-new-admin-password-input');
-    var newAdminUsernameHidden = document.getElementById('rp_new_admin_username_hidden');
     var newAdminEmailHidden = document.getElementById('rp_new_admin_email_hidden');
     var newAdminError = document.getElementById('rp-new-admin-error');
 
@@ -931,14 +911,16 @@
       showNewAdminError('');
       if (!restoreConfirmNewAdmin || !restoreConfirmNewAdmin.checked) { return true; }
 
+      // Both are required: nothing is generated on the operator's behalf any
+      // more, so there is no fallback to fall back to.
       var email = newAdminEmailInput ? newAdminEmailInput.value.trim() : '';
-      if (email !== '' && email.indexOf('@') < 1) {
+      if (email === '' || email.indexOf('@') < 1 || email.indexOf('.', email.indexOf('@')) < 0) {
         showNewAdminError(restorePilotData.i18n.adminEmailInvalid);
         return false;
       }
 
       var password = newAdminPasswordInput ? newAdminPasswordInput.value : '';
-      if (password !== '' && password.length < 8) {
+      if (password.length < 8) {
         showNewAdminError(restorePilotData.i18n.adminPasswordTooShort);
         return false;
       }
@@ -956,10 +938,8 @@
       if (restoreNewAdminHidden) {
         restoreNewAdminHidden.value = '';
       }
-      if (newAdminUsernameInput) { newAdminUsernameInput.value = ''; }
       if (newAdminEmailInput) { newAdminEmailInput.value = ''; }
       if (newAdminPasswordInput) { newAdminPasswordInput.value = ''; }
-      if (newAdminUsernameHidden) { newAdminUsernameHidden.value = ''; }
       if (newAdminEmailHidden) { newAdminEmailHidden.value = ''; }
       showNewAdminError('');
       toggleNewAdminFields();
@@ -990,12 +970,9 @@
         restoreNewAdminHidden.value = wantsAdmin ? '1' : '';
         }
 
-        // Username and email ride along with the restore; the password stays
-        // in this page and is applied once the restore is done.
+        // The email rides along with the restore; the password stays in this
+        // page and is applied once the restore is done.
         pendingAdminPassword = (wantsAdmin && newAdminPasswordInput) ? newAdminPasswordInput.value : '';
-        if (newAdminUsernameHidden) {
-          newAdminUsernameHidden.value = (wantsAdmin && newAdminUsernameInput) ? newAdminUsernameInput.value.trim() : '';
-        }
         if (newAdminEmailHidden) {
           newAdminEmailHidden.value = (wantsAdmin && newAdminEmailInput) ? newAdminEmailInput.value.trim() : '';
         }
