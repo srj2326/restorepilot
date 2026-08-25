@@ -9756,17 +9756,104 @@ final class RestorePilot_Backup_Migration {
     );
   }
 
+  /**
+   * The page every visitor sees while a restore holds the site.
+   *
+   * Deliberately self-contained: no external stylesheet, font, or image, and
+   * no database read of any kind. This renders during the window where the
+   * database is being replaced, so anything that queried an option could be
+   * reading a half-swapped table — and any asset request would 503 against
+   * this same gate. Everything needed is inlined.
+   *
+   * It carries no plugin name or link. This is the site owner's front end,
+   * shown to their visitors, and plugin credits there have to be opt-in and
+   * default to off (plugin guideline 10) — so the honest default is to say
+   * nothing about which plugin is doing the work.
+   *
+   * The bar is indeterminate on purpose. Real progress is not readable from
+   * here without a database the restore is actively rewriting, and a made-up
+   * percentage that stalls or slides backwards reads worse than an honest
+   * "something is happening".
+   */
   private static function render_maintenance_page(): void {
     nocache_headers();
     status_header(503);
     header('Retry-After: 30');
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Briefly unavailable</title></head>';
-    echo '<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f0f0f1;color:#1d2327;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;">';
-    echo '<div style="max-width:520px;padding:40px;text-align:center;">';
-    echo '<h1 style="font-size:22px;margin:0 0 12px;">Briefly unavailable for scheduled maintenance.</h1>';
-    echo '<p style="color:#50575e;line-height:1.6;margin:0;">This site is finishing a backup restore and will be back in a moment. Please check back shortly.</p>';
-    echo '</div></body></html>';
+
+    $title   = __('Briefly unavailable', 'restorepilot-backup-migration');
+    $heading = __('Briefly unavailable for scheduled maintenance', 'restorepilot-backup-migration');
+    $body    = __('This site is finishing a backup restore and will be back in a moment.', 'restorepilot-backup-migration');
+    $hint    = __('Please check back shortly.', 'restorepilot-backup-migration');
+    $status  = __('Restore in progress', 'restorepilot-backup-migration');
+
+    echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
+    echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
+    echo '<meta name="robots" content="noindex,nofollow">';
+    echo '<title>' . esc_html($title) . '</title>';
+    echo '<style>
+:root{
+  --rp-bg:#f6f7f7; --rp-card:#fff; --rp-ink:#1d2327; --rp-muted:#646970;
+  --rp-line:#dcdcde; --rp-accent:#2271b1; --rp-track:#e8eaec;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --rp-bg:#16191d; --rp-card:#1f2429; --rp-ink:#f0f0f1; --rp-muted:#a7aaad;
+    --rp-line:#2f353b; --rp-accent:#5ba3dd; --rp-track:#2b3137;
+  }
+}
+*{box-sizing:border-box}
+body{
+  margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+  padding:24px; background:var(--rp-bg); color:var(--rp-ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.rp-card{
+  width:100%; max-width:460px; background:var(--rp-card);
+  border:1px solid var(--rp-line); border-radius:10px;
+  padding:36px 32px; text-align:center;
+  box-shadow:0 1px 3px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.05);
+}
+.rp-status{
+  display:inline-flex; align-items:center; gap:7px;
+  font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--rp-muted); margin-bottom:18px;
+}
+.rp-dot{
+  width:7px; height:7px; border-radius:50%; background:var(--rp-accent);
+  animation:rp-pulse 1.8s ease-in-out infinite;
+}
+h1{font-size:19px; line-height:1.4; margin:0 0 10px; font-weight:600;}
+p{font-size:14.5px; line-height:1.65; margin:0; color:var(--rp-muted);}
+p + p{margin-top:6px;}
+.rp-track{
+  margin-top:26px; height:3px; border-radius:3px;
+  background:var(--rp-track); overflow:hidden;
+}
+.rp-bar{
+  height:100%; width:38%; border-radius:3px; background:var(--rp-accent);
+  animation:rp-slide 1.9s cubic-bezier(.65,0,.35,1) infinite;
+}
+@keyframes rp-slide{
+  0%{transform:translateX(-110%)} 100%{transform:translateX(330%)}
+}
+@keyframes rp-pulse{
+  0%,100%{opacity:1} 50%{opacity:.3}
+}
+@media (prefers-reduced-motion:reduce){
+  .rp-bar{animation:none; width:100%; opacity:.45}
+  .rp-dot{animation:none}
+}
+</style></head>';
+
+    echo '<body><main class="rp-card">';
+    echo '<div class="rp-status"><span class="rp-dot" aria-hidden="true"></span>' . esc_html($status) . '</div>';
+    echo '<h1>' . esc_html($heading) . '</h1>';
+    echo '<p>' . esc_html($body) . '</p>';
+    echo '<p>' . esc_html($hint) . '</p>';
+    echo '<div class="rp-track" role="progressbar" aria-label="' . esc_attr($status) . '"><div class="rp-bar"></div></div>';
+    echo '</main></body></html>';
     exit;
   }
 
