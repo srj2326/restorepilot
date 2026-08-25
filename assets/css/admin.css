@@ -334,7 +334,21 @@
   background: rgba(0,0,0,.5); align-items: center; justify-content: center; padding: 24px;
 }
 .rp-modal-backdrop.is-active { display: flex; }
-.rp-modal { width: min(580px,100%); background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.28); }
+/* Capped and column-flexed so a tall modal scrolls its own body instead of
+   growing past the viewport. Without this the head and foot are pushed off
+   screen and clipped by overflow:hidden -- which on the restore modal means
+   the required acknowledgement and the confirm button cannot be reached at
+   all, so the taller the modal gets the less usable it becomes. */
+.rp-modal {
+  width: min(580px,100%); background: #fff; border-radius: 10px; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,.28);
+  max-height: calc(100vh - 48px); /* 48px = the backdrop's own padding */
+  display: flex; flex-direction: column;
+}
+/* Head and foot hold their size; only the body gives. The confirm buttons
+   live in the foot, so they stay reachable at any viewport height. */
+.rp-modal__head, .rp-modal__foot { flex: 0 0 auto; }
+.rp-modal__body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .rp-modal__head { padding: 22px 24px 18px; border-bottom: 1px solid #f0f0f1; }
 .rp-modal__head-icon {
   width: 38px; height: 38px; border-radius: 10px; background: #fffbeb;
@@ -490,6 +504,10 @@
   }
   .rp-modal {
     margin: 20px 0;
+    /* Narrow screens scroll the backdrop instead (see above), so the modal is
+       free to be as tall as it likes. Keeping the desktop cap here as well
+       would nest one scrolling area inside another. */
+    max-height: none;
   }
   .rp-modal__head,
   .rp-modal__body,
