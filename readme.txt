@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,16 @@ Yes. Use `wp restorepilot backup` for a full backup, `wp restorepilot backup --d
 RestorePilot stops immediately, removes maintenance mode, and writes the full error to the Logs tab. A pre-restore rollback point may be available, but you should review the logs and verify the site before retrying.
 
 == Changelog ==
+
+= 0.5.1 =
+* Fixed: every restore created an extra administrator account, whether or not the "Create a new admin login" box was ticked, and its password appeared once and was then gone. If you have restored a site with this plugin, check Users for an account named `admin_` followed by six random characters and delete any you did not ask for.
+* Changed: "Create a new admin login" now asks for the email address and password you want, instead of generating them and showing the password once. You sign in with that email address. Nothing is displayed that has to be copied down before leaving the page, and the password is never written to the server during the restore -- it is applied from your browser once the restore finishes.
+* Fixed: backups of sites with a large table that has no primary key were far slower than they needed to be -- one 800,000-row table took nearly four minutes on its own, on every backup and on every restore, because restores take a rollback point first. Such a table is now read the same efficient way as any other where it has a unique column available. On the test site this took a full database export from 235 seconds to 15.
+* Improved: the restore progress bar now moves steadily through the database stage and names the table it has reached ("Restoring database (table 123 of 149)"). It previously sat on one number for the whole stage, which on a site with many tables is minutes of a bar that never moves -- indistinguishable from a restore that has died.
+* Fixed: the heading above the restore progress bar always read "Uploading", including after a restore had finished or failed, directly contradicting the message underneath it.
+* Changed: a finished restore now always returns you to the login page. A restore replaces the users table and the sign-in sessions stored alongside it, so you are signed out either way; the page used to send you into the admin area first, which only produced a bounce through login with a broken page on the way.
+* Fixed: the confirmation dialog could grow taller than the browser window with no way to scroll, putting the acknowledgement checkbox and the confirm button out of reach. Affected every dialog in the plugin, not only the restore one.
+* Improved: the maintenance page visitors see during a restore has been redesigned, works in light and dark themes, and can now be translated -- its text was previously fixed English.
 
 = 0.5.0 =
 * Added: backups now split into volumes of up to 1 GB instead of one large file, so hosts with a per-file size limit can back up large sites. Total backup size is limited only by available disk space. Configurable via the `restorepilot_backup_volume_bytes` filter.
