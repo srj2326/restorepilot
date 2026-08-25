@@ -817,7 +817,7 @@
       data.set('_ajax_nonce', restorePilotData.nonce);
       // Only whether a password was chosen, never the password itself: the
       // server needs this to know not to generate and display one.
-      data.set('new_admin_custom_password', pendingAdminPassword ? '1' : '0');
+      data.set('new_admin_custom_password', pendingAdminPassword ? '1' : '');
       fetch(ajaxurl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -954,7 +954,7 @@
         restoreConfirmNewAdmin.checked = false;
       }
       if (restoreNewAdminHidden) {
-        restoreNewAdminHidden.value = '0';
+        restoreNewAdminHidden.value = '';
       }
       if (newAdminUsernameInput) { newAdminUsernameInput.value = ''; }
       if (newAdminEmailInput) { newAdminEmailInput.value = ''; }
@@ -985,7 +985,9 @@
 
         var wantsAdmin = !!(restoreConfirmNewAdmin && restoreConfirmNewAdmin.checked);
         if (restoreNewAdminHidden) {
-          restoreNewAdminHidden.value = wantsAdmin ? '1' : '0';
+          // Empty, never '0' -- see post_bool(). This is the same convention
+        // the auto_detect_urls toggle already uses.
+        restoreNewAdminHidden.value = wantsAdmin ? '1' : '';
         }
 
         // Username and email ride along with the restore; the password stays

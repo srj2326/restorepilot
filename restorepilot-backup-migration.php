@@ -11948,8 +11948,21 @@ p + p{margin-top:6px;}
     return isset($_POST[$key]) ? sanitize_text_field(wp_unslash($_POST[$key])) : $default;
   }
 
+  /**
+   * Reads a submitted flag.
+   *
+   * Presence alone is not enough. An unchecked checkbox is simply absent from
+   * the POST, which is what the bare-presence test was written for, but a
+   * hidden field mirroring a checkbox has to submit something either way and
+   * the natural thing to submit is "0" — which presence alone reads as true.
+   * That is not hypothetical: create_new_admin does exactly this, so every
+   * restore was creating an administrator account whether or not one had been
+   * asked for, the account's generated password appearing once and then being
+   * gone. Anything a form can plausibly mean by "false" is treated as false.
+   */
   private static function post_bool(string $key): bool {
-    return self::post_value($key) !== '';
+    $value = strtolower(trim(self::post_value($key)));
+    return !in_array($value, ['', '0', 'false', 'off', 'no'], true);
   }
 
   private static function post_int(string $key, int $default = 0): int {
