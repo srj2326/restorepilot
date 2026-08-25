@@ -1412,6 +1412,15 @@ final class RestorePilot_Backup_Migration {
     wp_localize_script('restorepilot-admin', 'restorePilotData', [
       'nonce'        => wp_create_nonce(self::NONCE),
       'restoreTabUrl' => esc_url(add_query_arg('tab', 'restore', self::admin_url())),
+      // Where a finished restore sends the browser. Always the login form,
+      // never straight back into wp-admin: the restore has replaced the users
+      // table and the session tokens that live in usermeta alongside it, so
+      // whatever session this page still thinks it has is gone regardless of
+      // whether the restore was from this domain or another one. Landing on
+      // an admin screen first would just produce a bounce through login with
+      // a broken page on the way. Signing in returns here, where the
+      // completion dialog is waiting.
+      'loginUrl' => esc_url(wp_login_url(add_query_arg('tab', 'restore', self::admin_url()))),
       'i18n'         => [
         'noLogEntriesYet'          => __('No log entries yet.', 'restorepilot-backup-migration'),
         'noMatchingLogEntries'     => __('No matching log entries.', 'restorepilot-backup-migration'),

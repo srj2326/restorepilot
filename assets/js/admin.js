@@ -751,14 +751,17 @@
                 setRestoreProgressUi(100, restorePilotData.i18n.adminPasswordFailed, '#b32d2e');
               }).then(function () {
                 window.setTimeout(function () {
-                  window.location.href = restorePilotData.restoreTabUrl;
+                  window.location.href = restorePilotData.loginUrl;
                 }, 2500);
               });
               return;
             }
 
+            // Always the login form. The restore replaced the users table and
+            // the session tokens stored beside it, so this page's session is
+            // gone whether the backup came from this domain or another.
             window.setTimeout(function () {
-              window.location.href = restorePilotData.restoreTabUrl;
+              window.location.href = restorePilotData.loginUrl;
             }, 1500);
           } else if (status.status === 'error' || status.status === 'stale') {
             window.clearInterval(pollTimer);
