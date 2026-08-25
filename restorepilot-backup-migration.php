@@ -5826,10 +5826,22 @@ final class RestorePilot_Backup_Migration {
           $active_plan = $plans[$plan_by_table[$name]];
           $active_old_table = $name;
 
-          self::maybe_touch_restore_job($job_id, __('Restoring database tables...', 'restorepilot-backup-migration'), 52, [
-            'phase' => 'database',
-            'phase_label' => self::restore_phase_label('database'),
-          ]);
+          // Position of the table now starting: everything already finished,
+          // plus this one. The checkpoint tracks these to make the restore
+          // resumable — reporting them costs nothing and is the difference
+          // between a bar that moves and one that looks hung.
+          $table_total = count($plans);
+          $table_position = min($table_total, count($completed_set) + 1);
+
+          self::maybe_touch_restore_job(
+            $job_id,
+            __('Restoring database tables...', 'restorepilot-backup-migration'),
+            self::restore_database_phase_progress($table_position - 1, $table_total),
+            [
+              'phase' => 'database',
+              'phase_label' => self::restore_database_phase_label($table_position, $table_total),
+            ]
+          );
 
           if (self::table_exists($active_plan['tmp_table'])) {
             // Left behind by an earlier resumption of THIS restore — do not
@@ -5951,10 +5963,17 @@ final class RestorePilot_Backup_Migration {
         // Touch the job record on every row so the stale detector does not
         // fire during a very large single-table import that takes > 2 h.
         // maybe_touch throttles actual DB writes to once per 5 s.
-        self::maybe_touch_restore_job($job_id, __('Restoring database tables...', 'restorepilot-backup-migration'), 52, [
-          'phase' => 'database',
-          'phase_label' => self::restore_phase_label('database'),
-        ]);
+        $row_table_total = count($plans);
+        $row_table_position = min($row_table_total, count($completed_set) + 1);
+        self::maybe_touch_restore_job(
+          $job_id,
+          __('Restoring database tables...', 'restorepilot-backup-migration'),
+          self::restore_database_phase_progress($row_table_position - 1, $row_table_total),
+          [
+            'phase' => 'database',
+            'phase_label' => self::restore_database_phase_label($row_table_position, $row_table_total),
+          ]
+        );
 
         // Checked every row rather than every 200: throw_if_restore_chunk_
         // time_exceeded() is already gated behind $restore_chunk_progress_
@@ -8127,6 +8146,47 @@ final class RestorePilot_Backup_Migration {
       }
     }
     return $columns;
+  }
+
+  /**
+   * Where the bar should sit while the restore's table pass is $done tables
+   * into $total, interpolated across the span that pass owns.
+   *
+   * The surrounding restore phases report fixed figures — validating 12,
+   * rollback 24, maintenance 36, database 48, swap 64, files 70, finalizing
+   * 92 — so restoring tables occupies 48 up to 64. Left at the single figure
+   * it used to report, the bar sat unchanged for the whole pass, which on a
+   * site with many tables is minutes of looking exactly like a dead restore.
+   */
+  private static function restore_database_phase_progress(int $done, int $total): int {
+    $floor = 48;
+    $ceiling = 64;
+    if ($total < 1) {
+      return $floor;
+    }
+    $ratio = max(0.0, min(1.0, $done / $total));
+    // Stops one short of the ceiling: 64 is the table-swap step's own figure,
+    // and reaching it here would announce a step that has not started.
+    return min($ceiling - 1, $floor + (int) floor($ratio * ($ceiling - $floor)));
+  }
+
+  /**
+   * "Restoring database (table 123 of 149)" — the count is the point. The
+   * position was already being tracked to make the restore resumable; this
+   * only surfaces what the checkpoint already knows, so a restore that is
+   * working can be told apart from one that has stopped.
+   */
+  private static function restore_database_phase_label(int $position, int $total): string {
+    if ($total < 1) {
+      return self::restore_phase_label('database');
+    }
+
+    return sprintf(
+      /* translators: 1: number of the table being restored, 2: total tables to restore */
+      __('Restoring database (table %1$d of %2$d)', 'restorepilot-backup-migration'),
+      $position,
+      $total
+    );
   }
 
   /**
