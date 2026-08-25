@@ -1441,6 +1441,11 @@ final class RestorePilot_Backup_Migration {
         'cancelingBackup'          => __('Canceling backup...', 'restorepilot-backup-migration'),
         'canceling'                => __('Canceling', 'restorepilot-backup-migration'),
         'backupCancelError'        => __('Backup could not be canceled.', 'restorepilot-backup-migration'),
+        // Headline above the restore progress bar. Same reason as
+        // 'backupInProgress': hardcoded in the markup it read "Uploading" for
+        // the whole restore, including after one had finished or failed.
+        'uploading'                => __('Uploading', 'restorepilot-backup-migration'),
+        'restoreInProgress'        => __('Restore in progress', 'restorepilot-backup-migration'),
         'restoreStatusError'       => __('Restore status could not be read. If the site asks you to log in again, check the Logs tab after login.', 'restorepilot-backup-migration'),
         'restoreRunning'           => __('Restore is running...', 'restorepilot-backup-migration'),
         'restoreInProgressMaintenance' => __('Restore in progress — the site is briefly in maintenance mode. Please wait...', 'restorepilot-backup-migration'),
@@ -1938,7 +1943,7 @@ final class RestorePilot_Backup_Migration {
               <div class="rp-progress" id="rp-restore-progress" aria-live="polite">
                 <div class="rp-progress__wrap">
                   <div class="rp-progress__header">
-                    <span class="rp-progress__label"><?php echo esc_html__('Uploading…', 'restorepilot-backup-migration'); ?></span>
+                    <span class="rp-progress__label" id="rp-restore-progress-label"><?php echo esc_html__('Uploading…', 'restorepilot-backup-migration'); ?></span>
                     <span class="rp-progress__pct" id="rp-restore-progress-pct">0%</span>
                   </div>
                   <div class="rp-progress__track">

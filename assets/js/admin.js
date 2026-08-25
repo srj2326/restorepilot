@@ -575,6 +575,12 @@
         text: document.getElementById('rp-restore-progress-text')
       };
     }
+    function setRestoreProgressLabel(text) {
+      var label = document.getElementById('rp-restore-progress-label');
+      if (label && text) {
+        label.textContent = text;
+      }
+    }
     function setRestoreProgressUi(percent, text, color) {
       var els = restoreProgressEls();
       percent = Math.max(0, Math.min(100, parseInt(percent || 0, 10)));
@@ -671,6 +677,7 @@
             setRestoreProgressUi(60, restorePilotData.i18n.restoreInProgressMaintenance || restorePilotData.i18n.restoreRunning, '#2271b1');
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
               window.clearInterval(pollTimer);
+              setRestoreProgressLabel(restorePilotData.i18n.failed);
               setRestoreProgressUi(100, restorePilotData.i18n.restoreStatusErrorAfterLogin, '#b32d2e');
               setRestoreButtonsDisabled(form, false);
             }
@@ -693,6 +700,7 @@
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
               window.clearInterval(pollTimer);
               var errMsg = json && json.data && json.data.message ? json.data.message : restorePilotData.i18n.restoreStatusErrorAfterLogin;
+              setRestoreProgressLabel(restorePilotData.i18n.failed);
               setRestoreProgressUi(100, errMsg, '#b32d2e');
               setRestoreButtonsDisabled(form, false);
             }
@@ -704,6 +712,7 @@
           if (status.status === 'complete') {
             window.clearInterval(pollTimer);
             clearActiveRestoreJob();
+            setRestoreProgressLabel(restorePilotData.i18n.complete);
             setRestoreProgressUi(100, status.message || restorePilotData.i18n.restoreComplete, '#2271b1');
             if (status.new_admin_credentials && status.new_admin_credentials.username) {
               var panel = document.getElementById('rp-new-admin-result');
@@ -726,6 +735,7 @@
           } else if (status.status === 'error' || status.status === 'stale') {
             window.clearInterval(pollTimer);
             clearActiveRestoreJob();
+            setRestoreProgressLabel(restorePilotData.i18n.failed);
             setRestoreProgressUi(100, status.message || restorePilotData.i18n.restoreNeedsAttention, '#b32d2e');
             // Clear the server path so the form resets — the temp file is gone
             // and the user must re-choose a backup to avoid re-running the same restore.
@@ -744,6 +754,7 @@
           }
         }).catch(function (error) {
           window.clearInterval(pollTimer);
+          setRestoreProgressLabel(restorePilotData.i18n.failed);
           setRestoreProgressUi(100, error.message || restorePilotData.i18n.restoreStatusErrorAfterLogin, '#b32d2e');
           setRestoreButtonsDisabled(form, false);
         });
@@ -756,6 +767,7 @@
         window.restorepilotSwitchTab('restore', true);
       }
       setRestoreButtonsDisabled(form, true);
+      setRestoreProgressLabel(restorePilotData.i18n.restoreInProgress);
       setRestoreProgressUi(5, restorePilotData.i18n.queuingRestore, '#2271b1');
       var data = new FormData(form);
       data.set('action', 'restorepilot_ajax_restore');
@@ -780,6 +792,7 @@
         triggerRestoreRunner(json.data.job_id);
         pollRestoreJob(json.data.job_id, json.data.poll_token || '', form);
       }).catch(function (error) {
+        setRestoreProgressLabel(restorePilotData.i18n.failed);
         setRestoreProgressUi(100, error.message || restorePilotData.i18n.restoreNotStarted, '#b32d2e');
         setRestoreButtonsDisabled(form, false);
       });
@@ -801,6 +814,7 @@
         if (window.restorepilotSwitchTab) {
           window.restorepilotSwitchTab('restore', true);
         }
+        setRestoreProgressLabel(restorePilotData.i18n.restoreInProgress);
         setRestoreProgressUi(60, restorePilotData.i18n.restoreRunning, '#2271b1');
         setRestoreButtonsDisabled(restoreForm, true);
         pollRestoreJob(resumeRestore.jobId, resumeRestore.pollToken || '', restoreForm);
@@ -961,6 +975,7 @@
         data.set('total_chunks', String(totalChunks));
         data.append('chunk', file.slice(start, end), file.name + '.part' + index);
 
+        setRestoreProgressLabel(restorePilotData.i18n.uploading);
         setRestoreProgress(
           Math.floor((index / totalChunks) * 100),
           restorePilotData.i18n.uploadingBackup + ' ' + (index + 1) + '/' + totalChunks
@@ -982,6 +997,9 @@
           }
 
           if (json.data && json.data.complete && json.data.path) {
+            if (!isRestoreCheck) {
+              setRestoreProgressLabel(restorePilotData.i18n.restoreInProgress);
+            }
             setRestoreProgress(100, isRestoreCheck ? restorePilotData.i18n.uploadCompleteChecking : restorePilotData.i18n.uploadCompleteRestoring);
             if (serverPath) {
               serverPath.value = json.data.path;
@@ -1009,6 +1027,7 @@
         if (restoreProgressBar) {
           restoreProgressBar.style.background = '#b32d2e';
         }
+        setRestoreProgressLabel(restorePilotData.i18n.failed);
         setRestoreProgress(100, error.message || restorePilotData.i18n.backupUploadFailed);
       });
     });
