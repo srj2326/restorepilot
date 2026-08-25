@@ -5574,7 +5574,7 @@ final class RestorePilot_Backup_Migration {
         );
 
         $limit = 500;
-        $pk_columns = self::primary_key_columns($create_sql);
+        $pk_columns = self::keyset_cursor_columns($create_sql);
 
         if ($pk_columns) {
           // Deterministic keyset pagination: always move strictly forward by
@@ -5629,14 +5629,15 @@ final class RestorePilot_Backup_Migration {
             }
           } while (is_array($batch) && count($batch) === $limit);
         } else {
-          // No primary key at all — keyset pagination needs at least one
-          // strictly-ordered, unique cursor, so this table falls back to
-          // OFFSET-based export. It remains subject to the same
-          // concurrent-write caveat that keyset pagination exists to avoid
-          // for every other core table. A real WordPress core table always
-          // has a primary key; this path only exists for a third-party table
-          // sharing this site's prefix.
-          self::write_log('No primary key for ' . $table . '; exporting with offset-based pagination.');
+          // Neither a primary key nor a UNIQUE NOT NULL key — keyset
+          // pagination needs at least one strictly-ordered, unique cursor, so
+          // this table falls back to OFFSET-based export. That re-scans every
+          // preceding row on each batch, so it is markedly slower on a large
+          // table, and it remains subject to the same concurrent-write caveat
+          // that keyset pagination exists to avoid for every other table. A
+          // real WordPress core table always has a primary key; this path only
+          // exists for a third-party table sharing this site's prefix.
+          self::write_log('No usable key for ' . $table . '; exporting with offset-based pagination (slower on large tables).');
           $offset = 0;
           do {
             self::throw_if_backup_cancelled($job_id);
@@ -8110,6 +8111,93 @@ final class RestorePilot_Backup_Migration {
       }
     }
     return $columns;
+  }
+
+  /**
+   * Every column the table declares NOT NULL, as a lookup keyed by name.
+   *
+   * SHOW CREATE TABLE always prints one column definition per line, and a
+   * column line always opens with a backtick-quoted name — key definitions
+   * open with PRIMARY/UNIQUE/KEY/INDEX/CONSTRAINT instead, so anchoring on
+   * that leading backtick keeps the two apart. Matching NOT NULL as a whole
+   * word is what stops the trailing "DEFAULT NULL" of a nullable column from
+   * reading as one.
+   */
+  private static function not_null_columns(string $create_sql): array {
+    $columns = [];
+    foreach (preg_split('/\r\n|\r|\n/', $create_sql) as $line) {
+      if (!preg_match('/^\s*`([A-Za-z0-9_]+)`\s+/', $line, $m)) {
+        continue;
+      }
+      if (preg_match('/\bNOT\s+NULL\b/i', $line)) {
+        $columns[$m[1]] = true;
+      }
+    }
+    return $columns;
+  }
+
+  /**
+   * Columns of a UNIQUE key that is safe to paginate on, or [] if none is.
+   *
+   * A table can carry a perfectly good ordered, unique, indexed column and
+   * still have no PRIMARY KEY — `UNIQUE KEY id (id)` on a NOT NULL
+   * AUTO_INCREMENT column is a real pattern in third-party plugin schemas.
+   * Without this, such a table falls back to OFFSET pagination, which re-scans
+   * and discards every preceding row on each batch; on a table of a few
+   * hundred thousand rows that is minutes of extra work per backup.
+   *
+   * Every column of the key must be NOT NULL. MySQL permits repeated NULLs in
+   * a UNIQUE index, so a nullable one is not actually unique, and a NULL can
+   * never satisfy the "> last seen" tuple comparison keyset pagination walks
+   * with — rows would be silently skipped rather than exported.
+   */
+  private static function unique_key_columns(string $create_sql): array {
+    $not_null = self::not_null_columns($create_sql);
+    if (!$not_null) {
+      return [];
+    }
+
+    // Same nested-paren allowance as primary_key_columns(), for key-length
+    // specifiers like UNIQUE KEY `k` (`a`(100),`b`).
+    if (!preg_match_all(
+      '/\bUNIQUE\s+(?:KEY|INDEX)\s*(?:`[^`]*`)?\s*\(((?:[^()]|\(\d+\))*)\)/i',
+      $create_sql,
+      $matches,
+      PREG_SET_ORDER
+    )) {
+      return [];
+    }
+
+    foreach ($matches as $match) {
+      $columns = [];
+      foreach (explode(',', $match[1]) as $part) {
+        $part = trim(preg_replace('/\(\d+\)\s*(ASC|DESC)?\s*$/i', '', trim($part)));
+        $part = trim($part, "` \t\n\r\0\x0B");
+        if ($part === '' || !preg_match('/^[A-Za-z0-9_]+$/', $part) || empty($not_null[$part])) {
+          // Unusable key — try the next one rather than giving up entirely.
+          continue 2;
+        }
+        $columns[] = $part;
+      }
+      if ($columns) {
+        return $columns;
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * The columns to paginate a table's export by: its PRIMARY KEY when it has
+   * one, otherwise a UNIQUE NOT NULL key that serves the same purpose, and []
+   * when the table offers neither and has to fall back to OFFSET.
+   */
+  private static function keyset_cursor_columns(string $create_sql): array {
+    $primary = self::primary_key_columns($create_sql);
+    if ($primary) {
+      return $primary;
+    }
+    return self::unique_key_columns($create_sql);
   }
 
   /**
