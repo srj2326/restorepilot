@@ -711,3 +711,17 @@
 .rp-master-reset-error{background:#fcf0f1;border:1px solid #d63638;border-radius:4px;color:#d63638;font-size:13px;padding:10px 14px;margin-top:12px;}
 @keyframes rotation{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 @media (max-width:600px){.rp-danger-list{columns:1;}.rp-danger-body__action{width:100%;}}
+
+/* New-admin fields in the pre-restore modal. Revealed only when the operator
+   asks for a new login, so the modal stays short for everyone else. */
+.rp-new-admin-fields{margin-top:12px;padding-top:12px;border-top:1px solid #dcdcde;}
+.rp-new-admin-fields[hidden]{display:none;}
+.rp-new-admin-fields__intro{margin:0 0 10px;font-size:12px;color:#646970;}
+.rp-field{margin:0 0 12px;}
+.rp-field:last-of-type{margin-bottom:0;}
+.rp-field label{display:block;font-size:12px;font-weight:600;color:#1d2327;margin-bottom:4px;}
+.rp-field input[type="text"],.rp-field input[type="email"],.rp-field input[type="password"]{width:100%;}
+.rp-field__hint{display:block;font-size:11px;line-height:1.5;color:#646970;margin-top:4px;}
+.rp-field__error{background:#fcf0f1;border:1px solid #d63638;border-radius:4px;color:#d63638;font-size:12px;padding:8px 12px;margin-top:10px;}
+.rp-field__error[hidden]{display:none;}
+.rp-new-admin-continue{margin-top:12px;font-size:12px;color:#646970;}

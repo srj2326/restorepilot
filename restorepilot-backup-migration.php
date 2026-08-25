@@ -96,6 +96,12 @@ function restorepilot_backup_migration_bootstrap(): void {
   // DB restore that invalidates the admin session. Uses a poll_token instead
   // of cookie auth so it is safe to expose to the browser and works nopriv.
   add_action('wp_ajax_nopriv_restorepilot_restore_status',    ['RestorePilot_Backup_Migration', 'handle_restore_status']);
+  // Same reasoning as the status endpoint: this runs after the database swap
+  // has invalidated the admin session, so it authenticates on the job's own
+  // poll_token. See handle_set_restore_admin_password() for why the chosen
+  // password takes this route rather than travelling with the job.
+  add_action('wp_ajax_restorepilot_set_restore_admin_password',        ['RestorePilot_Backup_Migration', 'handle_set_restore_admin_password']);
+  add_action('wp_ajax_nopriv_restorepilot_set_restore_admin_password', ['RestorePilot_Backup_Migration', 'handle_set_restore_admin_password']);
   add_action('init', ['RestorePilot_Backup_Migration', 'maybe_block_for_maintenance']);
   add_action('restorepilot_cron_backup_job', ['RestorePilot_Backup_Migration', 'run_backup_job'], 10, 2);
   add_action('restorepilot_cron_restore_job', ['RestorePilot_Backup_Migration', 'run_restore_job'], 10, 2);
@@ -1444,6 +1450,13 @@ final class RestorePilot_Backup_Migration {
         // Headline above the restore progress bar. Same reason as
         // 'backupInProgress': hardcoded in the markup it read "Uploading" for
         // the whole restore, including after one had finished or failed.
+        'adminEmailInvalid'        => __('Enter a valid email address, or leave it blank to have one generated.', 'restorepilot-backup-migration'),
+        'adminPasswordTooShort'    => __('Use at least 8 characters, or leave it blank to have one generated.', 'restorepilot-backup-migration'),
+        'settingAdminPassword'     => __('Restore complete. Setting your admin password...', 'restorepilot-backup-migration'),
+        'adminPasswordSet'         => __('Restore complete. Your admin password has been set — sign in with it.', 'restorepilot-backup-migration'),
+        /* translators: %s: the username of the administrator account that was created */
+        'adminPasswordSetFor'      => __('Restore complete. Sign in as %s with the password you chose.', 'restorepilot-backup-migration'),
+        'adminPasswordFailed'      => __('The restore finished, but your chosen password could not be applied. Use "Lost your password?" on the login page with the email you entered to set one.', 'restorepilot-backup-migration'),
         'uploading'                => __('Uploading', 'restorepilot-backup-migration'),
         'restoreInProgress'        => __('Restore in progress', 'restorepilot-backup-migration'),
         'restoreStatusError'       => __('Restore status could not be read. If the site asks you to log in again, check the Logs tab after login.', 'restorepilot-backup-migration'),
@@ -1920,6 +1933,11 @@ final class RestorePilot_Backup_Migration {
               <!-- Set from the pre-restore confirmation modal's own checkbox, which
                    lives outside this form in the DOM — see admin.js. -->
               <input type="hidden" name="create_new_admin" id="rp_create_new_admin_hidden" value="0">
+              <!-- Copied from the modal the same way. Neither is a secret, so
+                   both travel with the job; the chosen password deliberately
+                   does not — see the modal's own comment. -->
+              <input type="hidden" name="new_admin_username" id="rp_new_admin_username_hidden" value="">
+              <input type="hidden" name="new_admin_email" id="rp_new_admin_email_hidden" value="">
 
               <div class="rp-upload-box">
                 <span class="dashicons dashicons-cloud-upload" aria-hidden="true"></span>
@@ -2109,9 +2127,49 @@ final class RestorePilot_Backup_Migration {
                   <input type="checkbox" id="rp-restore-confirm-new-admin">
                   <span>
                     <span class="rp-toggle__label"><?php echo esc_html__('Create a new admin login for this site', 'restorepilot-backup-migration'); ?></span>
-                    <span class="rp-toggle__desc"><?php echo esc_html__('Useful when restoring a backup from a different domain and you don\'t have (or don\'t want to reuse) that site\'s admin password. Adds a new administrator account with a generated password — shown once, after the restore finishes — instead of changing any existing account.', 'restorepilot-backup-migration'); ?></span>
+                    <span class="rp-toggle__desc"><?php echo esc_html__('Useful when restoring a backup from a different domain and you don\'t have (or don\'t want to reuse) that site\'s admin password. Adds a new administrator account instead of changing any existing one.', 'restorepilot-backup-migration'); ?></span>
                   </span>
                 </label>
+
+                <div class="rp-new-admin-fields" id="rp-new-admin-fields" hidden>
+                  <p class="rp-new-admin-fields__intro">
+                    <?php echo esc_html__('Leave any field blank and one will be generated for you.', 'restorepilot-backup-migration'); ?>
+                  </p>
+
+                  <p class="rp-field">
+                    <label for="rp-new-admin-username-input"><?php echo esc_html__('Username', 'restorepilot-backup-migration'); ?></label>
+                    <input type="text" id="rp-new-admin-username-input" autocomplete="off" spellcheck="false"
+                      placeholder="<?php echo esc_attr__('Generated automatically', 'restorepilot-backup-migration'); ?>">
+                  </p>
+
+                  <p class="rp-field">
+                    <label for="rp-new-admin-email-input"><?php echo esc_html__('Email', 'restorepilot-backup-migration'); ?></label>
+                    <input type="email" id="rp-new-admin-email-input" autocomplete="off" spellcheck="false"
+                      placeholder="<?php echo esc_attr__('Generated automatically', 'restorepilot-backup-migration'); ?>">
+                    <span class="rp-field__hint"><?php echo esc_html__('Used for password recovery, so prefer an address you can actually receive mail at.', 'restorepilot-backup-migration'); ?></span>
+                  </p>
+
+                  <?php
+                  // The password field is deliberately not part of the restore
+                  // form. Its value stays in the browser and is sent in one
+                  // call after the restore finishes, so it is never written to
+                  // the job record — which is mirrored to a file under uploads
+                  // in order to survive the database swap, and would therefore
+                  // hold a plaintext password on disk for the whole restore.
+                  // The username and email do travel with the job: neither is
+                  // a secret, and having them there means the account is still
+                  // created even if this browser never comes back, leaving
+                  // WordPress's own password reset as the way in.
+                  ?>
+                  <p class="rp-field">
+                    <label for="rp-new-admin-password-input"><?php echo esc_html__('Password', 'restorepilot-backup-migration'); ?></label>
+                    <input type="password" id="rp-new-admin-password-input" autocomplete="new-password" spellcheck="false"
+                      placeholder="<?php echo esc_attr__('Generated and shown once', 'restorepilot-backup-migration'); ?>">
+                    <span class="rp-field__hint"><?php echo esc_html__('Set here, this password is never stored on the server during the restore — it is applied from this page once the restore finishes. Leave blank and one is generated and shown to you once instead.', 'restorepilot-backup-migration'); ?></span>
+                  </p>
+
+                  <div class="rp-field__error" id="rp-new-admin-error" hidden></div>
+                </div>
               </div>
               <label class="rp-modal__confirm-check">
                 <input type="checkbox" id="rp-restore-confirm-check">
@@ -3595,7 +3653,7 @@ final class RestorePilot_Backup_Migration {
     }
   }
 
-  private static function perform_restore(string $restore_zip_path, bool $auto_detect_urls, bool $restore_files, string $job_id = '', string $manual_source_url = '', string $manual_target_url = '', bool $create_new_admin = false): array {
+  private static function perform_restore(string $restore_zip_path, bool $auto_detect_urls, bool $restore_files, string $job_id = '', string $manual_source_url = '', string $manual_target_url = '', bool $create_new_admin = false, string $new_admin_username = '', string $new_admin_email = '', bool $new_admin_custom_password = false): array {
     self::assert_multisite_unsupported();
     self::prepare_for_long_operation();
 
@@ -3862,9 +3920,30 @@ final class RestorePilot_Backup_Migration {
       if ($create_new_admin && !$new_admin_created) {
         $new_admin_created = true;
         $checkpoint_base['new_admin_created'] = true;
-        $new_admin = self::create_new_admin_login();
+        $new_admin = self::create_new_admin_login($new_admin_username, $new_admin_email);
         if ($job_id !== '' && !empty($new_admin['username'])) {
-          self::update_restore_job($job_id, ['new_admin_credentials' => $new_admin]);
+          // The user id is what handle_set_restore_admin_password() needs to
+          // find this account afterwards. It is recorded either way — an
+          // operator who chose a password still has to have their choice
+          // applied, and one who did not may still change it later.
+          $updates = ['new_admin_user_id' => (int) ($new_admin['user_id'] ?? 0)];
+
+          // The generated password is only worth surfacing when nobody is
+          // coming back with one of their own. When the operator chose a
+          // password, this account's real password arrives from their browser
+          // in a moment, so showing a generated one would put a live
+          // credential on screen for no reason — which is the whole thing
+          // this route exists to avoid.
+          if (!$new_admin_custom_password) {
+            $updates['new_admin_credentials'] = [
+              'username' => $new_admin['username'],
+              'password' => $new_admin['password'],
+            ];
+          } else {
+            $updates['new_admin_username_final'] = $new_admin['username'];
+          }
+
+          self::update_restore_job($job_id, $updates);
         }
       }
 
@@ -4050,6 +4129,12 @@ final class RestorePilot_Backup_Migration {
         'auto_detect_urls' => self::post_bool('auto_detect_urls'),
         'restore_files' => self::post_bool('restore_files'),
         'create_new_admin' => self::post_bool('create_new_admin'),
+        // Neither is a secret, so both are safe in a job record that is
+        // mirrored to disk. The chosen password is not here by design --
+        // see handle_set_restore_admin_password().
+        'new_admin_username' => sanitize_user(self::post_value('new_admin_username'), true),
+        'new_admin_email' => sanitize_email(self::post_value('new_admin_email')),
+        'new_admin_custom_password' => self::post_bool('new_admin_custom_password'),
         'source_url' => self::post_value('source_url'),
         'target_url' => self::post_value('target_url', home_url()),
         'token' => $token,
@@ -4164,7 +4249,94 @@ final class RestorePilot_Backup_Migration {
       self::update_restore_job($job_id, ['new_admin_credentials' => null]);
     }
 
+    // Tells the page the account is waiting for the password it is holding.
+    // Only the username travels here — it is not a secret, and the page needs
+    // it to say which account it just set up.
+    if (!empty($job['new_admin_custom_password']) && !empty($job['new_admin_user_id'])) {
+      $response['new_admin_awaiting_password'] = true;
+      $response['new_admin_username'] = (string) ($job['new_admin_username_final'] ?? '');
+    }
+
     wp_send_json_success($response);
+  }
+
+  /**
+   * Applies an operator-chosen password to the account the restore created.
+   *
+   * This exists so that password never has to be stored. The restore job is
+   * mirrored to a file under uploads (it has to be — the database swap wipes
+   * the option it would otherwise live in), so anything carried through the
+   * job sits in plaintext on disk for the whole restore. The username and
+   * email go that route because neither is a secret; the password comes here
+   * instead, straight from the page, once.
+   *
+   * Authorised by the same poll_token the status endpoint uses, because this
+   * runs in the same window: the database swap has already invalidated the
+   * admin session, so a capability check alone would reject the very request
+   * that finishes the job. The token is no wider a privilege than it looks —
+   * the restore it belongs to was started by an administrator who asked for
+   * this account, and the account has already been created by the time this
+   * can run. What is added here is which password it ends up with.
+   *
+   * Deliberately single-use and tightly scoped: the job must have asked for a
+   * new admin, must have finished, must still name the account, and the
+   * pointer is consumed before the password is applied, so a replayed request
+   * cannot reset the account a second time.
+   */
+  public static function handle_set_restore_admin_password(): void {
+    self::enable_error_logging();
+
+    $job_id     = self::post_value('job_id');
+    $poll_token = self::post_value('poll_token');
+
+    $job = self::get_restore_job($job_id);
+    if (!$job) {
+      wp_send_json_error(['message' => __('Restore job not found.', 'restorepilot-backup-migration')], 404);
+    }
+
+    $stored_token = !empty($job['poll_token']) ? (string) $job['poll_token'] : self::read_poll_token_file($job_id);
+    $token_auth = $poll_token !== '' && $stored_token !== '' && hash_equals($stored_token, $poll_token);
+
+    if (!$token_auth) {
+      if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => __('Permission denied.', 'restorepilot-backup-migration')], 403);
+      }
+      check_ajax_referer(self::NONCE);
+    }
+
+    if (($job['status'] ?? '') !== 'complete') {
+      wp_send_json_error(['message' => __('The restore has not finished yet.', 'restorepilot-backup-migration')], 409);
+    }
+
+    $user_id = (int) ($job['new_admin_user_id'] ?? 0);
+    if ($user_id < 1) {
+      wp_send_json_error(['message' => __('This restore did not create an admin account to set a password on.', 'restorepilot-backup-migration')], 409);
+    }
+
+    // Consumed before the password is applied, so a replayed or duplicated
+    // request cannot reset the account again later.
+    self::update_restore_job($job_id, ['new_admin_user_id' => 0]);
+
+    $user = get_user_by('id', $user_id);
+    if (!$user) {
+      wp_send_json_error(['message' => __('The account this restore created could no longer be found.', 'restorepilot-backup-migration')], 410);
+    }
+
+    // Read raw: a password is not text to be sanitized, and running it
+    // through a sanitizer would silently change what the operator typed.
+    // phpcs:ignore WordPress.Security.NonceVerification.Missing -- authorized above via poll_token or nonce+capability.
+    $password = isset($_POST['new_password']) ? (string) wp_unslash($_POST['new_password']) : '';
+    if ($password === '' || strlen($password) < 8) {
+      wp_send_json_error(['message' => __('Choose a password of at least 8 characters.', 'restorepilot-backup-migration')], 400);
+    }
+
+    wp_set_password($password, $user_id);
+    self::write_log('Applied the chosen password to the restore admin account (username only, never the password): ' . $user->user_login);
+
+    wp_send_json_success([
+      'username' => $user->user_login,
+      'message'  => __('Your admin password has been set.', 'restorepilot-backup-migration'),
+    ]);
   }
 
   public static function handle_run_restore_job_admin(): void {
@@ -4246,7 +4418,10 @@ final class RestorePilot_Backup_Migration {
         $job_id,
         isset($job['source_url']) ? (string) $job['source_url'] : '',
         isset($job['target_url']) ? (string) $job['target_url'] : '',
-        !empty($job['create_new_admin'])
+        !empty($job['create_new_admin']),
+        isset($job['new_admin_username']) ? (string) $job['new_admin_username'] : '',
+        isset($job['new_admin_email']) ? (string) $job['new_admin_email'] : '',
+        !empty($job['new_admin_custom_password'])
       );
 
       self::update_restore_job($job_id, [
@@ -7017,22 +7192,62 @@ final class RestorePilot_Backup_Migration {
    * logged and never written anywhere except the one job-record field the
    * completion UI reads to show it exactly once.
    */
-  private static function create_new_admin_login(): array {
-    $suffix = strtolower(wp_generate_password(6, false, false));
-    $username = 'admin_' . $suffix;
-    while (username_exists($username)) {
-      $suffix = strtolower(wp_generate_password(6, false, false));
-      $username = 'admin_' . $suffix;
+  /**
+   * Creates the post-restore administrator account.
+   *
+   * Runs after the database swap, so every uniqueness check here is made
+   * against the RESTORED site's users — a name that was free before the
+   * restore may well be taken in the backup, and the reverse.
+   *
+   * A requested username or email is honoured when it is valid and free, and
+   * silently replaced with a generated one when it is not. Refusing outright
+   * is not an option this late: the database is already replaced, and the
+   * whole reason for this account is that the operator may have no other way
+   * in. An account under a different name is recoverable; no account is not.
+   * The name actually used is returned so the caller can report it.
+   *
+   * The password is always generated here. A password the operator chose
+   * reaches the account through set_restore_admin_password() instead, after
+   * the restore has finished, so that it never has to sit in the job record.
+   */
+  private static function create_new_admin_login(string $requested_username = '', string $requested_email = ''): array {
+    $username = '';
+    $requested_username = trim($requested_username);
+    if ($requested_username !== '' && validate_username($requested_username) && !username_exists($requested_username)) {
+      $username = $requested_username;
     }
 
-    $host = wp_parse_url(home_url(), PHP_URL_HOST);
-    $host = is_string($host) && $host !== '' ? $host : 'example.com';
-    $email = $username . '@' . $host;
-    // Vanishingly unlikely to collide (random username, freshly derived
-    // email), but wp_insert_user() requires a unique email — verify rather
-    // than assume, and fall back to a second, still-derived candidate.
-    if (email_exists($email)) {
-      $email = $username . '-' . substr(md5((string) wp_rand()), 0, 6) . '@' . $host;
+    if ($username === '') {
+      if ($requested_username !== '') {
+        self::write_log('Requested admin username was unusable or already taken in the restored site; generating one instead.');
+      }
+      $suffix = strtolower(wp_generate_password(6, false, false));
+      $username = 'admin_' . $suffix;
+      while (username_exists($username)) {
+        $suffix = strtolower(wp_generate_password(6, false, false));
+        $username = 'admin_' . $suffix;
+      }
+    }
+
+    $email = '';
+    $requested_email = trim($requested_email);
+    if ($requested_email !== '' && is_email($requested_email) && !email_exists($requested_email)) {
+      $email = $requested_email;
+    }
+
+    if ($email === '') {
+      if ($requested_email !== '') {
+        self::write_log('Requested admin email was unusable or already in use in the restored site; deriving one instead.');
+      }
+      $host = wp_parse_url(home_url(), PHP_URL_HOST);
+      $host = is_string($host) && $host !== '' ? $host : 'example.com';
+      $email = $username . '@' . $host;
+      // Vanishingly unlikely to collide (random username, freshly derived
+      // email), but wp_insert_user() requires a unique email — verify rather
+      // than assume, and fall back to a second, still-derived candidate.
+      if (email_exists($email)) {
+        $email = $username . '-' . substr(md5((string) wp_rand()), 0, 6) . '@' . $host;
+      }
     }
 
     $password = wp_generate_password(20, true, true);
@@ -7051,7 +7266,7 @@ final class RestorePilot_Backup_Migration {
 
     self::write_log('Created a new admin login for this restore (username only, never the password): ' . $username);
 
-    return ['username' => $username, 'password' => $password];
+    return ['username' => $username, 'password' => $password, 'user_id' => (int) $user_id];
   }
 
   /**

@@ -714,6 +714,49 @@
             clearActiveRestoreJob();
             setRestoreProgressLabel(restorePilotData.i18n.complete);
             setRestoreProgressUi(100, status.message || restorePilotData.i18n.restoreComplete, '#2271b1');
+            // The account is created but still on a throwaway password; the
+            // one the operator chose has been held in this page all along and
+            // goes now, in a single call, so it never had to be stored.
+            if (status.new_admin_awaiting_password && pendingAdminPassword) {
+              var adminData = new FormData();
+              adminData.set('action', 'restorepilot_set_restore_admin_password');
+              adminData.set('job_id', jobId);
+              adminData.set('poll_token', pollToken || '');
+              adminData.set('_ajax_nonce', restorePilotData.nonce);
+              adminData.set('new_password', pendingAdminPassword);
+              pendingAdminPassword = '';
+
+              setRestoreProgressUi(100, restorePilotData.i18n.settingAdminPassword, '#2271b1');
+
+              fetch(ajaxurl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: adminData
+              }).then(function (response) {
+                return response.json();
+              }).then(function (adminJson) {
+                if (adminJson && adminJson.success) {
+                  var who = (adminJson.data && adminJson.data.username) ? adminJson.data.username : '';
+                  setRestoreProgressUi(100, who
+                    ? restorePilotData.i18n.adminPasswordSetFor.replace('%s', who)
+                    : restorePilotData.i18n.adminPasswordSet, '#2271b1');
+                } else {
+                  // The restore itself succeeded; only the password step did
+                  // not. Say exactly that, and name the way in that still
+                  // works, rather than reporting a failed restore.
+                  setRestoreProgressLabel(restorePilotData.i18n.restoreInProgress);
+                  setRestoreProgressUi(100, restorePilotData.i18n.adminPasswordFailed, '#b32d2e');
+                }
+              }).catch(function () {
+                setRestoreProgressUi(100, restorePilotData.i18n.adminPasswordFailed, '#b32d2e');
+              }).then(function () {
+                window.setTimeout(function () {
+                  window.location.href = restorePilotData.restoreTabUrl;
+                }, 2500);
+              });
+              return;
+            }
+
             if (status.new_admin_credentials && status.new_admin_credentials.username) {
               var panel = document.getElementById('rp-new-admin-result');
               var userEl = document.getElementById('rp-new-admin-username');
@@ -772,6 +815,9 @@
       var data = new FormData(form);
       data.set('action', 'restorepilot_ajax_restore');
       data.set('_ajax_nonce', restorePilotData.nonce);
+      // Only whether a password was chosen, never the password itself: the
+      // server needs this to know not to generate and display one.
+      data.set('new_admin_custom_password', pendingAdminPassword ? '1' : '0');
       fetch(ajaxurl, {
         method: 'POST',
         credentials: 'same-origin',
@@ -850,6 +896,55 @@
     // submit — FormData only picks up the form's own descendants.
     var restoreConfirmNewAdmin = document.getElementById('rp-restore-confirm-new-admin');
     var restoreNewAdminHidden = document.getElementById('rp_create_new_admin_hidden');
+    var newAdminFields = document.getElementById('rp-new-admin-fields');
+    var newAdminUsernameInput = document.getElementById('rp-new-admin-username-input');
+    var newAdminEmailInput = document.getElementById('rp-new-admin-email-input');
+    var newAdminPasswordInput = document.getElementById('rp-new-admin-password-input');
+    var newAdminUsernameHidden = document.getElementById('rp_new_admin_username_hidden');
+    var newAdminEmailHidden = document.getElementById('rp_new_admin_email_hidden');
+    var newAdminError = document.getElementById('rp-new-admin-error');
+
+    // The chosen password is held here and nowhere else until the restore
+    // finishes, then sent in a single call. It deliberately never goes into
+    // the restore form: the job record it would ride in is mirrored to a file
+    // on disk so it can survive the database swap.
+    var pendingAdminPassword = '';
+
+    function toggleNewAdminFields() {
+      if (!newAdminFields || !restoreConfirmNewAdmin) { return; }
+      newAdminFields.hidden = !restoreConfirmNewAdmin.checked;
+    }
+    if (restoreConfirmNewAdmin) {
+      restoreConfirmNewAdmin.addEventListener('change', toggleNewAdminFields);
+    }
+
+    function showNewAdminError(message) {
+      if (!newAdminError) { return; }
+      newAdminError.textContent = message || '';
+      newAdminError.hidden = !message;
+    }
+
+    // Checked here only for the things the browser can know. Whether a name is
+    // free cannot be settled now: the restore replaces the users table, so the
+    // only meaningful check happens server-side against the restored site.
+    function validateNewAdminFields() {
+      showNewAdminError('');
+      if (!restoreConfirmNewAdmin || !restoreConfirmNewAdmin.checked) { return true; }
+
+      var email = newAdminEmailInput ? newAdminEmailInput.value.trim() : '';
+      if (email !== '' && email.indexOf('@') < 1) {
+        showNewAdminError(restorePilotData.i18n.adminEmailInvalid);
+        return false;
+      }
+
+      var password = newAdminPasswordInput ? newAdminPasswordInput.value : '';
+      if (password !== '' && password.length < 8) {
+        showNewAdminError(restorePilotData.i18n.adminPasswordTooShort);
+        return false;
+      }
+      return true;
+    }
+
     function resetRestoreConfirmModal() {
       if (restoreConfirmCheck) {
         restoreConfirmCheck.checked = false;
@@ -861,6 +956,13 @@
       if (restoreNewAdminHidden) {
         restoreNewAdminHidden.value = '0';
       }
+      if (newAdminUsernameInput) { newAdminUsernameInput.value = ''; }
+      if (newAdminEmailInput) { newAdminEmailInput.value = ''; }
+      if (newAdminPasswordInput) { newAdminPasswordInput.value = ''; }
+      if (newAdminUsernameHidden) { newAdminUsernameHidden.value = ''; }
+      if (newAdminEmailHidden) { newAdminEmailHidden.value = ''; }
+      showNewAdminError('');
+      toggleNewAdminFields();
     }
     if (restoreConfirmCancel) {
       restoreConfirmCancel.addEventListener('click', function () {
@@ -879,9 +981,28 @@
     }
     if (restoreConfirmContinue) {
       restoreConfirmContinue.addEventListener('click', function () {
+        if (!validateNewAdminFields()) { return; }
+
+        var wantsAdmin = !!(restoreConfirmNewAdmin && restoreConfirmNewAdmin.checked);
         if (restoreNewAdminHidden) {
-          restoreNewAdminHidden.value = (restoreConfirmNewAdmin && restoreConfirmNewAdmin.checked) ? '1' : '0';
+          restoreNewAdminHidden.value = wantsAdmin ? '1' : '0';
         }
+
+        // Username and email ride along with the restore; the password stays
+        // in this page and is applied once the restore is done.
+        pendingAdminPassword = (wantsAdmin && newAdminPasswordInput) ? newAdminPasswordInput.value : '';
+        if (newAdminUsernameHidden) {
+          newAdminUsernameHidden.value = (wantsAdmin && newAdminUsernameInput) ? newAdminUsernameInput.value.trim() : '';
+        }
+        if (newAdminEmailHidden) {
+          newAdminEmailHidden.value = (wantsAdmin && newAdminEmailInput) ? newAdminEmailInput.value.trim() : '';
+        }
+        if (newAdminPasswordInput) {
+          // Nothing further reads the field itself, so do not leave a
+          // password sitting in the DOM for the rest of the restore.
+          newAdminPasswordInput.value = '';
+        }
+
         restoreForm.setAttribute('data-rp-confirmed', '1');
         closeRestoreConfirmModal();
         if (restoreForm.requestSubmit) {
