@@ -468,7 +468,12 @@ trait RestorePilot_Restore {
     // are already restored. Acting on a stale one repeats work that was
     // already durably done, which surfaces as a duplicate-key insert partway
     // through a restore.
-    $job = self::get_restore_job($job_id) ?: $job;
+    // Fresh, not merely repeated: the read before the lock cached this
+    // record in this process, so an ordinary re-read hands back the same
+    // stale copy and this worker resumes from a position another worker
+    // has already finished -- which is precisely how two workers ended up
+    // inserting the same rows and colliding on a duplicate key.
+    $job = self::get_restore_job($job_id, true) ?: $job;
     if (in_array(($job['status'] ?? ''), ['complete', 'error', 'stale'], true)) {
       self::release_restore_worker_lock($job_id);
       self::$active_restore_job_id = '';

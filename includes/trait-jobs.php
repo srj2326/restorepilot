@@ -81,18 +81,40 @@ trait RestorePilot_Jobs {
     return is_array($data) ? $data : [];
   }
 
-  private static function get_backup_job(string $job_id): array {
+  /**
+   * @param bool $fresh Re-read from the database, ignoring this process's
+   *   option cache. Required after taking the worker lock: the read that
+   *   happens before the lock caches the record, so a plain re-read hands
+   *   back the same stale copy and the caller carries on from a position
+   *   another worker has already moved past.
+   */
+  private static function get_backup_job(string $job_id, bool $fresh = false): array {
     if ($job_id === '') {
       return [];
+    }
+
+    if ($fresh) {
+      wp_cache_delete(self::backup_job_option($job_id), 'options');
     }
 
     $job = get_option(self::backup_job_option($job_id), []);
     return is_array($job) ? $job : [];
   }
 
-  private static function get_restore_job(string $job_id): array {
+  /**
+   * @param bool $fresh Re-read from the database, ignoring this process's
+   *   option cache. Required after taking the worker lock: the read that
+   *   happens before the lock caches the record, so a plain re-read hands
+   *   back the same stale copy and the caller carries on from a position
+   *   another worker has already moved past.
+   */
+  private static function get_restore_job(string $job_id, bool $fresh = false): array {
     if ($job_id === '') {
       return [];
+    }
+
+    if ($fresh) {
+      wp_cache_delete(self::restore_job_option($job_id), 'options');
     }
 
     $job = get_option(self::restore_job_option($job_id), []);
