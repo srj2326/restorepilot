@@ -302,6 +302,76 @@ trait RestorePilot_Database {
     return defined('CUSTOM_USER_TABLE') || defined('CUSTOM_USER_META_TABLE');
   }
 
+  /**
+   * Tables belonging to this site that WordPress itself did not create.
+   *
+   * Master Reset deletes every plugin's files but used to leave the tables
+   * those plugins made, so a site advertised as reset to "a clean WordPress
+   * installation" still carried their data -- unreadable, since the code that
+   * understood it was gone, but still occupying space and still copied into
+   * every backup. On the site this was found on that was 108 MB across three
+   * form-plugin tables, out of a 206 MB database.
+   *
+   * Core tables are named exhaustively rather than guessed at, so a table is
+   * only ever treated as disposable because it is absent from that list.
+   */
+  private static function foreign_plugin_tables(): array {
+    $wpdb = self::wpdb();
+    $prefix = $wpdb->prefix;
+    if (!is_string($prefix) || $prefix === '') {
+      return [];
+    }
+
+    // Every table WordPress creates for a single site, plus the network ones,
+    // which are not this site's to remove even when the prefix matches.
+    $core = [];
+    foreach ([
+      'posts', 'postmeta', 'comments', 'commentmeta', 'terms', 'termmeta',
+      'term_taxonomy', 'term_relationships', 'links', 'options', 'users', 'usermeta',
+      'blogs', 'blogmeta', 'site', 'sitemeta', 'signups', 'registration_log',
+      'blog_versions',
+    ] as $t) {
+      if (!empty($wpdb->$t) && is_string($wpdb->$t)) {
+        $core[strtolower($wpdb->$t)] = true;
+      }
+    }
+    // usermeta/users can be shared across installs and are handled separately
+    // by the reset itself; never consider them disposable here.
+    $core[strtolower($prefix . 'users')] = true;
+    $core[strtolower($prefix . 'usermeta')] = true;
+
+    // like_prefix_literal() returns a complete quoted literal, wildcard and
+    // all, for concatenation -- passing it through prepare()'s %s binding
+    // escapes the quoting it already did and matches nothing. Every other
+    // call site concatenates it the same way.
+    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- the literal is built by like_prefix_literal() from esc_like()+esc_sql(); no caller-supplied value reaches this string.
+    $found = $wpdb->get_col('SHOW TABLES LIKE ' . self::like_prefix_literal($prefix));
+    if (!is_array($found)) {
+      return [];
+    }
+
+    $tables = [];
+    foreach ($found as $table) {
+      $table = (string) $table;
+      if (isset($core[strtolower($table)])) {
+        continue;
+      }
+      // On multisite prefixes, wp_2_* belongs to another site, not this one.
+      if (self::table_belongs_to_other_site($table, $prefix)) {
+        continue;
+      }
+      // Never remove a scratch table a restore is mid-way through using; the
+      // reset's own cleanup owns those.
+      if (strpos($table, self::RESTORE_TMP_TABLE_MARKER) !== false
+        || strpos($table, self::RESTORE_OLD_TABLE_MARKER) !== false) {
+        continue;
+      }
+      $tables[] = $table;
+    }
+
+    return $tables;
+  }
+
   private static function table_belongs_to_other_site(string $table, string $prefix): bool {
     if (!is_multisite() || $prefix === '' || strpos($table, $prefix) !== 0) {
       return false;

@@ -853,6 +853,7 @@ trait RestorePilot_AdminUi {
                   <li><?php echo esc_html__('All themes except Twenty Twenty-Five', 'restorepilot-backup-migration'); ?></li>
                   <li><?php echo esc_html__('All user accounts except the current administrator', 'restorepilot-backup-migration'); ?></li>
                   <li><?php echo esc_html__('All plugin settings and site customisations', 'restorepilot-backup-migration'); ?></li>
+                  <li><?php echo esc_html__('All database tables created by other plugins, and everything stored in them (form entries, orders, logs, and anything else a plugin kept in its own tables)', 'restorepilot-backup-migration'); ?></li>
                 </ul>
               </div>
               <div class="rp-danger-body__action">

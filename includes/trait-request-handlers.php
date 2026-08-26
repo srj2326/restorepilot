@@ -819,6 +819,26 @@ trait RestorePilot_RequestHandlers {
     // error rather than a false success. This is checked at the end alongside
     // the post-reset usability invariants that already existed.
     $reset_problems = [];
+    $dropped_foreign = 0;
+
+    // 1a. Drop tables other plugins created.
+    //
+    // Their files are removed further down, so leaving these behind produces a
+    // site that is not the "clean WordPress installation" this action promises:
+    // the data is unreadable with the plugin gone, yet still takes up space and
+    // is still copied into every backup afterwards. Dropped rather than
+    // emptied, because an empty table nothing will ever create again is still
+    // not a clean install.
+    foreach (self::foreign_plugin_tables() as $foreign_table) {
+      $wpdb->last_error = '';
+      // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- DDL; the identifier is bound with %i and the table was matched against this site's own prefix.
+      $wpdb->query($wpdb->prepare('DROP TABLE IF EXISTS %i', $foreign_table));
+      if ($wpdb->last_error !== '') {
+        $reset_problems[] = 'could not drop table ' . $foreign_table . ': ' . $wpdb->last_error;
+      } else {
+        $dropped_foreign++;
+      }
+    }
 
     // 1. Truncate all content tables
     foreach (['posts', 'postmeta', 'terms', 'termmeta', 'term_taxonomy', 'term_relationships', 'comments', 'commentmeta', 'links'] as $t) {
@@ -1009,10 +1029,21 @@ trait RestorePilot_RequestHandlers {
       ], 500);
     }
 
-    self::write_log('Master Reset complete. Site reset to clean WordPress state.');
+    self::write_log('Master Reset complete. Site reset to clean WordPress state. Dropped ' . $dropped_foreign . ' table(s) belonging to other plugins.');
 
     wp_send_json_success([
-      'message'  => __('Master Reset complete. Your site has been reset to a clean WordPress installation.', 'restorepilot-backup-migration'),
+      'message'  => $dropped_foreign > 0
+        ? sprintf(
+          /* translators: %d: number of database tables removed that were created by other plugins */
+          _n(
+            'Master Reset complete. Your site has been reset to a clean WordPress installation, including %d database table left behind by another plugin.',
+            'Master Reset complete. Your site has been reset to a clean WordPress installation, including %d database tables left behind by other plugins.',
+            $dropped_foreign,
+            'restorepilot-backup-migration'
+          ),
+          $dropped_foreign
+        )
+        : __('Master Reset complete. Your site has been reset to a clean WordPress installation.', 'restorepilot-backup-migration'),
       'redirect' => admin_url(),
     ]);
   }
