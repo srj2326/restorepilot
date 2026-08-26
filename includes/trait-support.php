@@ -10,6 +10,40 @@ if (!defined('ABSPATH')) {
 }
 
 trait RestorePilot_Support {
+  /**
+   * The plugin's main file, and the directory holding it.
+   *
+   * __FILE__ and __DIR__ answer for the file they are written in, so once this
+   * code was split across includes/ every use of them silently began pointing
+   * one level too deep. That is not a theoretical problem: Master Reset used
+   * dirname(__FILE__) to know which plugin directory was its own and skip it,
+   * and after the split it matched nothing and deleted RestorePilot along with
+   * everything else.
+   *
+   * Anything that needs to know where the plugin lives must ask here instead.
+   * The constants are defined by the main file itself; the fallback climbs out
+   * of includes/ so this still answers correctly if it is ever called before
+   * they are set.
+   */
+  private static function plugin_root_file(): string {
+    if (defined('RESTOREPILOT_BACKUP_MIGRATION_FILE')) {
+      return (string) RESTOREPILOT_BACKUP_MIGRATION_FILE;
+    }
+    return dirname(__DIR__) . '/restorepilot-backup-migration.php';
+  }
+
+  private static function plugin_root_dir(): string {
+    if (defined('RESTOREPILOT_BACKUP_MIGRATION_DIR')) {
+      return rtrim((string) RESTOREPILOT_BACKUP_MIGRATION_DIR, '/\\');
+    }
+    return dirname(__DIR__);
+  }
+
+  /** This plugin's own "folder/file.php" identifier, as active_plugins stores it. */
+  private static function plugin_basename_self(): string {
+    return plugin_basename(self::plugin_root_file());
+  }
+
   private static function get_settings(): array {
     $settings = get_option(self::SETTINGS_OPTION, []);
     if (!is_array($settings)) {

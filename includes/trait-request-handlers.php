@@ -924,7 +924,7 @@ trait RestorePilot_RequestHandlers {
     // here, before every subsequent options-API call, covers both.)
     wp_cache_flush();
     // Restore essential WordPress defaults
-    update_option('active_plugins', [plugin_basename(__FILE__)]);
+    update_option('active_plugins', [self::plugin_basename_self()]);
     // Re-activate the default theme through the proper WordPress API: switch_theme()
     // validates the theme on disk, rebuilds the theme-roots cache, and writes the
     // template/stylesheet/current_theme options correctly.
@@ -948,7 +948,7 @@ trait RestorePilot_RequestHandlers {
     }
 
     // 5. Delete all plugins except RestorePilot
-    $own_dir = realpath(dirname(__FILE__));
+    $own_dir = realpath(self::plugin_root_dir());
     $failed_plugins = [];
     if (is_dir(self::plugins_dir()) && $own_dir !== false) {
       foreach (new DirectoryIterator(self::plugins_dir()) as $item) {
@@ -1004,7 +1004,7 @@ trait RestorePilot_RequestHandlers {
     // still reported success. Report a failure instead of a false success so the
     // administrator knows the site needs attention.
     $active_after = get_option('active_plugins');
-    if (!is_array($active_after) || !in_array(plugin_basename(__FILE__), $active_after, true)) {
+    if (!is_array($active_after) || !in_array(self::plugin_basename_self(), $active_after, true)) {
       $reset_problems[] = 'active_plugins was not written';
     }
 

@@ -266,12 +266,12 @@ trait RestorePilot_Logging {
 
   private static function error_file_is_relevant(string $file): bool {
     $file_path = realpath($file) ?: $file;
-    $plugin_dir = realpath(dirname(__FILE__)) ?: dirname(__FILE__);
+    $plugin_dir = realpath(self::plugin_root_dir()) ?: self::plugin_root_dir();
 
     $file_path = str_replace('\\', '/', $file_path);
     $plugin_dir = str_replace('\\', '/', $plugin_dir);
 
-    return $file_path === str_replace('\\', '/', __FILE__) || strpos($file_path, trailingslashit($plugin_dir)) === 0;
+    return $file_path === str_replace('\\', '/', self::plugin_root_file()) || strpos($file_path, trailingslashit($plugin_dir)) === 0;
   }
 
   private static function php_error_label(int $severity): string {

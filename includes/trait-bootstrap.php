@@ -43,7 +43,7 @@ trait RestorePilot_Bootstrap {
   }
 
   public static function plugin_row_meta(array $links, string $file): array {
-    if (plugin_basename(__FILE__) !== $file) {
+    if (self::plugin_basename_self() !== $file) {
       return $links;
     }
     $links[] = '<a href="https://wordpress.org/support/plugin/restorepilot-backup-migration/" target="_blank" rel="noopener noreferrer">' . esc_html__('Support', 'restorepilot-backup-migration') . '</a>';

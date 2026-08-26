@@ -1378,7 +1378,7 @@ trait RestorePilot_Restore {
     $restored_files = $start_index;
     // Never overwrite our own plugin files — the backup contains the version from
     // the SOURCE site, which may be older than the one running this restore.
-    $own_plugin_rel = 'plugins/' . basename(dirname(__FILE__)) . '/';
+    $own_plugin_rel = 'plugins/' . basename(self::plugin_root_dir()) . '/';
     for ($i = $start_index; $i < $zip->num_files(); $i++) {
       try {
         self::throw_if_restore_chunk_time_exceeded();
