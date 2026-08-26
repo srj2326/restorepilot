@@ -425,15 +425,53 @@ trait RestorePilot_Database {
    * only one restore can run at a time (see RESTORE_LOCK_OPTION), and a
    * fresh restore always sweeps and clears the prior journal first.
    */
-  private static function journal_restore_scratch_tables(array $table_names): void {
+  /**
+   * Records the scratch tables a restore is about to create, against the job
+   * that owns them.
+   *
+   * Keyed by job, because the journal used to be one flat list shared by every
+   * restore: a second restore starting while a first was still going would
+   * journal over it, and its opening sweep would drop the first restore's live
+   * tables out from under it. That is reachable in normal use -- abandoning a
+   * stuck restore releases the locks but does not stop the worker already
+   * mid-chunk, so the next restore can begin while it is still writing.
+   */
+  private static function journal_restore_scratch_tables(string $job_id, array $table_names): void {
     $table_names = array_values(array_unique(array_filter($table_names, static function ($name) {
       return is_string($name) && $name !== '' && preg_match('/^[A-Za-z0-9_]+$/', $name);
     })));
-    update_option(self::RESTORE_TABLE_JOURNAL_OPTION, $table_names, false);
+
+    $journal = get_option(self::RESTORE_TABLE_JOURNAL_OPTION, []);
+    if (!is_array($journal)) {
+      $journal = [];
+    }
+    // A journal written before this was keyed by job is a flat list of names.
+    // Park it under a key of its own so the sweep can still clear it.
+    if ($journal && array_keys($journal) === range(0, count($journal) - 1)) {
+      $journal = ['' => $journal];
+    }
+
+    $journal[$job_id] = $table_names;
+    update_option(self::RESTORE_TABLE_JOURNAL_OPTION, $journal, false);
   }
 
-  private static function clear_restore_table_journal(): void {
-    delete_option(self::RESTORE_TABLE_JOURNAL_OPTION);
+  /** Forgets one restore's scratch tables, leaving any other restore's alone. */
+  private static function clear_restore_table_journal(string $job_id = null): void {
+    if ($job_id === null) {
+      delete_option(self::RESTORE_TABLE_JOURNAL_OPTION);
+      return;
+    }
+
+    $journal = get_option(self::RESTORE_TABLE_JOURNAL_OPTION, []);
+    if (!is_array($journal) || !isset($journal[$job_id])) {
+      return;
+    }
+    unset($journal[$job_id]);
+    if ($journal) {
+      update_option(self::RESTORE_TABLE_JOURNAL_OPTION, $journal, false);
+    } else {
+      delete_option(self::RESTORE_TABLE_JOURNAL_OPTION);
+    }
   }
 
   /**
@@ -443,35 +481,74 @@ trait RestorePilot_Database {
    * destroy an unrelated table that happens to share the marker string,
    * which has no restore journal to prove RestorePilot created it.
    */
-  private static function sweep_stale_restore_tables(string $prefix): void {
-    $journaled = get_option(self::RESTORE_TABLE_JOURNAL_OPTION, []);
-    if (!is_array($journaled) || !$journaled) {
+  /**
+   * Drops scratch tables left behind by restores that are no longer running.
+   *
+   * A restore still in flight is skipped entirely. Its tables are not stale --
+   * they are being written to right now, and dropping them fails that restore
+   * mid-insert with a table that no longer exists.
+   */
+  private static function sweep_stale_restore_tables(string $prefix, string $current_job_id = ''): void {
+    $journal = get_option(self::RESTORE_TABLE_JOURNAL_OPTION, []);
+    if (!is_array($journal) || !$journal) {
       return;
+    }
+    if (array_keys($journal) === range(0, count($journal) - 1)) {
+      $journal = ['' => $journal];
     }
 
     $wpdb = self::wpdb();
-    foreach ($journaled as $stale) {
-      $stale = (string) $stale;
-      // Extra safety: only drop names that are still identifier-safe and
-      // belong to this site's prefix plus one of our own scratch markers —
-      // the journal is trusted, but this keeps the DROP scope identical to
-      // what temporary_table_name()/old_table_name() can ever produce.
-      if (!preg_match('/^[A-Za-z0-9_]+$/', $stale)) {
+    $kept = [];
+
+    foreach ($journal as $owner_job => $tables) {
+      $owner_job = (string) $owner_job;
+      if (!is_array($tables)) {
         continue;
       }
-      if (strpos($stale, $prefix) !== 0) {
+
+      // Never this restore's own tables: it is about to use them.
+      if ($current_job_id !== '' && $owner_job === $current_job_id) {
+        $kept[$owner_job] = $tables;
         continue;
       }
-      $rest = substr($stale, strlen($prefix));
-      if (strpos($rest, self::RESTORE_TMP_TABLE_MARKER) !== 0 && strpos($rest, self::RESTORE_OLD_TABLE_MARKER) !== 0) {
-        continue;
+
+      // Nor another restore's, while that restore is still going.
+      if ($owner_job !== '') {
+        $owner = self::get_restore_job($owner_job, true);
+        $owner_status = (string) ($owner['status'] ?? '');
+        if (in_array($owner_status, ['queued', 'running'], true)) {
+          $kept[$owner_job] = $tables;
+          continue;
+        }
       }
-      // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-      $wpdb->query($wpdb->prepare('DROP TABLE IF EXISTS %i', $stale));
-      self::write_log('Swept stale restore table: ' . $stale);
+
+      foreach ($tables as $stale) {
+        $stale = (string) $stale;
+        // Extra safety: only drop names that are still identifier-safe and
+        // belong to this site's prefix plus one of our own scratch markers --
+        // the journal is trusted, but this keeps the DROP scope identical to
+        // what temporary_table_name()/old_table_name() can ever produce.
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $stale)) {
+          continue;
+        }
+        if (strpos($stale, $prefix) !== 0) {
+          continue;
+        }
+        $rest = substr($stale, strlen($prefix));
+        if (strpos($rest, self::RESTORE_TMP_TABLE_MARKER) !== 0 && strpos($rest, self::RESTORE_OLD_TABLE_MARKER) !== 0) {
+          continue;
+        }
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->query($wpdb->prepare('DROP TABLE IF EXISTS %i', $stale));
+        self::write_log('Swept stale restore table: ' . $stale);
+      }
     }
 
-    self::clear_restore_table_journal();
+    if ($kept) {
+      update_option(self::RESTORE_TABLE_JOURNAL_OPTION, $kept, false);
+    } else {
+      delete_option(self::RESTORE_TABLE_JOURNAL_OPTION);
+    }
   }
 
   private static function throw_on_db_error(string $context): void {

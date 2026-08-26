@@ -126,8 +126,11 @@ trait RestorePilot_Restore {
         // only ever happens this once. Sweeping again on a later resumption
         // would drop this restore's OWN in-progress tmp tables, not just a
         // genuinely stale attempt's — see restore_database()'s docblock.
-        self::sweep_stale_restore_tables(self::wpdb()->prefix);
-        self::journal_restore_scratch_tables(array_merge(
+        // Both scoped to this job: the sweep leaves alone anything belonging
+        // to a restore that is still running, and the journal records these
+        // tables against this restore rather than over whatever was there.
+        self::sweep_stale_restore_tables(self::wpdb()->prefix, $job_id);
+        self::journal_restore_scratch_tables($job_id, array_merge(
           array_column($restore_plan['plans'], 'tmp_table'),
           array_column($restore_plan['plans'], 'old_table_candidate')
         ));
@@ -360,7 +363,7 @@ trait RestorePilot_Restore {
       self::set_restore_success_notice($source_url, $target_url);
       self::release_restore_lock($restore_lock_token);
       $restore_lock_token = '';
-      self::clear_restore_table_journal();
+      self::clear_restore_table_journal($job_id);
 
       return [
         'message' => __('Restore completed. Please log in again if WordPress asks you to.', 'restorepilot-backup-migration'),
@@ -968,7 +971,7 @@ trait RestorePilot_Restore {
       // yielded cleanly, still mid-restore — this never runs and the journal
       // correctly survives for the next restore attempt.
       if (!$yielding) {
-        self::clear_restore_table_journal();
+        self::clear_restore_table_journal($job_id);
       }
     }
   }
