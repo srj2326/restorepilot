@@ -3093,6 +3093,20 @@ final class RestorePilot_Backup_Migration {
       return;
     }
 
+    // Re-read under the lock, for the same reason as the restore side: the
+    // copy above predates holding it, and its checkpoint decides what work is
+    // still outstanding.
+    $job = self::get_backup_job($job_id) ?: $job;
+    if (in_array(($job['status'] ?? ''), ['complete', 'error', 'stale', 'canceled'], true)) {
+      self::release_backup_worker_lock($job_id);
+      self::$active_backup_job_id = '';
+      return;
+    }
+
+    // Set when this chunk yields, and acted on only after the worker lock has
+    // been released below — see the dispatch at the end of this method.
+    $dispatch_next_chunk = false;
+
     $resumption = (int) ($job['checkpoint']['resumption'] ?? 0);
     // A job let through the guard above specifically because it was already
     // 'canceled' must stay 'canceled' here — stamping it back to 'running'
@@ -3149,7 +3163,7 @@ final class RestorePilot_Backup_Migration {
         'message' => __('Backup is continuing in the background.', 'restorepilot-backup-migration'),
       ]);
       self::write_log('Backup chunk finished, continuing as resumption ' . $checkpoint['resumption'] . ': ' . $job_id);
-      self::dispatch_backup_worker($job_id, $token);
+      $dispatch_next_chunk = true;
     } catch (RestorePilot_Backup_Cancelled_Exception $e) {
       self::write_log('Backup job canceled: ' . $job_id);
       self::update_backup_job($job_id, [
@@ -3173,6 +3187,15 @@ final class RestorePilot_Backup_Migration {
     } finally {
       self::release_backup_worker_lock($job_id);
       self::$active_backup_job_id = '';
+    }
+
+    // After the finally, for the same reason as the restore side: the worker
+    // lock has to be gone before the next chunk can take it. Dispatched from
+    // inside the try, the loopback arrived while this request still held the
+    // lock, failed to acquire it, and returned silently — leaving the +5s
+    // cron fallback to start every chunk.
+    if ($dispatch_next_chunk) {
+      self::dispatch_backup_worker($job_id, $token);
     }
   }
 
@@ -4363,7 +4386,23 @@ final class RestorePilot_Backup_Migration {
       return;
     }
 
+    // Re-read now that the lock is held. The copy above was taken before it
+    // was, so it may describe the job as it stood before whoever held the
+    // lock finished with it -- and its checkpoint is what says which tables
+    // are already restored. Acting on a stale one repeats work that was
+    // already durably done, which surfaces as a duplicate-key insert partway
+    // through a restore.
+    $job = self::get_restore_job($job_id) ?: $job;
+    if (in_array(($job['status'] ?? ''), ['complete', 'error', 'stale'], true)) {
+      self::release_restore_worker_lock($job_id);
+      self::$active_restore_job_id = '';
+      return;
+    }
+
     $resumption = (int) ($job['checkpoint']['resumption'] ?? 0);
+    // Set when this chunk yields, and acted on only after the worker lock has
+    // been released below — see the dispatch at the end of this method.
+    $dispatch_next_chunk = false;
 
     try {
       self::write_log('Restore runner started: ' . $job_id . ($resumption > 1 ? (' (resumption ' . $resumption . ')') : ''));
@@ -4419,7 +4458,7 @@ final class RestorePilot_Backup_Migration {
         'message' => __('Restore is continuing in the background.', 'restorepilot-backup-migration'),
       ]);
       self::write_log('Restore chunk finished, continuing as resumption ' . $checkpoint['resumption'] . ': ' . $job_id);
-      self::dispatch_restore_worker($job_id, $token);
+      $dispatch_next_chunk = true;
     } catch (Throwable $e) {
       self::write_log('Restore job failed: ' . $job_id . '; ' . $e->getMessage());
       $has_rollback = !empty(self::list_restore_rollback_points());
@@ -4444,6 +4483,18 @@ final class RestorePilot_Backup_Migration {
       // still polling for the final "complete"/"error" state and would otherwise
       // lose authentication mid-poll. They are short-lived and swept by
       // cleanup_stale_temp_files() (1-hour age) and at the next restore start.
+    }
+
+    // Deliberately after the finally, because the worker lock has to be gone
+    // before the next chunk can take it. Dispatched from inside the try, the
+    // loopback arrived while this request still held the lock, failed to
+    // acquire it, and returned without a word — so every chunk was actually
+    // started by the +5s cron fallback instead. On a restore of any size that
+    // is five seconds of nothing per chunk: a fifth of the total run on this
+    // site's own timings, spent waiting for a request that had already been
+    // turned away.
+    if ($dispatch_next_chunk) {
+      self::dispatch_restore_worker($job_id, $token);
     }
   }
 
@@ -11339,34 +11390,83 @@ p + p{margin-top:6px;}
     return $age >= 6 * HOUR_IN_SECONDS;
   }
 
-  private static function acquire_backup_worker_lock(string $job_id): bool {
-    // The option name is namespaced with the literal 'restorepilot_backup_worker_'
-    // prefix directly at each add_option() call below, followed by a
-    // sanitize_key()'d job id. $option (built the same way via
-    // backup_worker_lock_option()) is used only for the matching get_option()/
-    // delete_option() calls, which read/remove the identical name.
-    $option = self::backup_worker_lock_option($job_id);
-    $lock   = ['started' => time()];
+  /**
+   * Takes a named worker lock, or returns false if another worker holds it.
+   *
+   * add_option() cannot do this, despite the comment that used to claim it
+   * could. It decides whether the option exists with a get_option() read and
+   * then writes with INSERT ... ON DUPLICATE KEY UPDATE, which never fails on
+   * a duplicate — so two workers arriving together both read "absent", both
+   * write, and both are told they won. That is exactly what happened here:
+   * two restore workers ran the same chunk one second apart and collided on a
+   * duplicate primary key mid-restore.
+   *
+   * This is the pattern WordPress core uses for the same job in
+   * WP_Upgrader::create_lock(): INSERT IGNORE, with no ON DUPLICATE clause, so
+   * the unique index on option_name decides it inside the database and exactly
+   * one caller can win. The value is a bare timestamp rather than a serialized
+   * array, so the staleness check below can compare it without unserializing.
+   */
+  private static function claim_worker_lock(string $option): bool {
+    global $wpdb;
 
-    // Use add_option as the sole atomic gate (MySQL UNIQUE constraint ensures
-    // only one caller wins).  Only delete a stale lock first if the option
-    // already exists and is confirmed old — and re-attempt via add_option so
-    // two callers racing on a stale lock cannot both win.
-    if (add_option('restorepilot_backup_worker_' . sanitize_key($job_id), $lock, '', false)) {
+    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the point of this query is to bypass the option cache and let the database arbitrate.
+    $claimed = $wpdb->query($wpdb->prepare(
+      "INSERT IGNORE INTO `{$wpdb->options}` (`option_name`, `option_value`, `autoload`) VALUES (%s, %s, 'off')",
+      $option,
+      (string) time()
+    ));
+
+    if (!$claimed) {
+      return false;
+    }
+
+    // The row went in behind the option cache's back, so anything it still
+    // believes about this name is now wrong.
+    wp_cache_delete($option, 'options');
+    $notoptions = wp_cache_get('notoptions', 'options');
+    if (is_array($notoptions) && isset($notoptions[$option])) {
+      unset($notoptions[$option]);
+      wp_cache_set('notoptions', $notoptions, 'options');
+    }
+
+    return true;
+  }
+
+  /**
+   * How old a worker lock has to be before another worker may take it over.
+   * Long, because a legitimate chunk can sit on one very large table.
+   */
+  const WORKER_LOCK_STALE_SECONDS = 6 * HOUR_IN_SECONDS;
+
+  /**
+   * Shared body of the two acquire_*_worker_lock() calls.
+   */
+  private static function acquire_worker_lock(string $option): bool {
+    if (self::claim_worker_lock($option)) {
       return true;
     }
 
-    $existing = get_option($option, []);
-    if (!is_array($existing) || empty($existing['started'])) {
+    // Someone holds it. Read straight past the cache: this process may never
+    // have read this name before and would otherwise be told it is absent.
+    wp_cache_delete($option, 'options');
+    $started = (int) get_option($option, 0);
+    if ($started <= 0) {
       return false;
     }
-    if ((time() - (int) $existing['started']) < 6 * HOUR_IN_SECONDS) {
+    if ((time() - $started) < self::WORKER_LOCK_STALE_SECONDS) {
       return false;
     }
 
-    // Lock is stale: delete it then try to acquire atomically.
+    // Expired. Clear it and race for it again -- whoever wins the INSERT
+    // IGNORE this time is the single holder, so two workers arriving at an
+    // expired lock together still cannot both proceed.
     delete_option($option);
-    return (bool) add_option('restorepilot_backup_worker_' . sanitize_key($job_id), $lock, '', false);
+    return self::claim_worker_lock($option);
+  }
+
+  private static function acquire_backup_worker_lock(string $job_id): bool {
+    return self::acquire_worker_lock(self::backup_worker_lock_option($job_id));
   }
 
   private static function release_backup_worker_lock(string $job_id): void {
@@ -11378,23 +11478,7 @@ p + p{margin-top:6px;}
   }
 
   private static function acquire_restore_worker_lock(string $job_id): bool {
-    $option = self::restore_worker_lock_option($job_id);
-    $lock   = ['started' => time()];
-
-    if (add_option('restorepilot_restore_worker_' . sanitize_key($job_id), $lock, '', false)) {
-      return true;
-    }
-
-    $existing = get_option($option, []);
-    if (!is_array($existing) || empty($existing['started'])) {
-      return false;
-    }
-    if ((time() - (int) $existing['started']) < 6 * HOUR_IN_SECONDS) {
-      return false;
-    }
-
-    delete_option($option);
-    return (bool) add_option('restorepilot_restore_worker_' . sanitize_key($job_id), $lock, '', false);
+    return self::acquire_worker_lock(self::restore_worker_lock_option($job_id));
   }
 
   private static function release_restore_worker_lock(string $job_id): void {
