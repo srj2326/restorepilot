@@ -192,6 +192,8 @@ RestorePilot stops immediately, removes maintenance mode, and writes the full er
 == Changelog ==
 
 = 0.5.3 =
+* Fixed: the duplicate-entry error during a restore that 0.5.2 claimed to fix was not actually fixed. The correction there re-read the restore's saved position after taking the lock that makes a worker the only one running, but WordPress caches that read within a request, so it handed back the same stale copy it already had and two workers could still resume from the same place. It now reads past the cache.
+* Fixed: starting a restore while another was still finishing could make the new one delete the tables the old one was still writing to, failing it with a missing-table error. Each restore now tracks its own scratch tables, and the cleanup that removes leftovers skips any restore that is still going.
 * Fixed: Master Reset deleted RestorePilot itself, along with the other plugins it is meant to remove. Reorganising the code in 0.5.2 moved the check that told the reset which plugin folder was its own, so it stopped recognising itself. If you ran Master Reset on 0.5.2 the plugin was removed but your stored backups were not -- reinstall RestorePilot and they will still be listed. Six other places that located the plugin's own files the same way were corrected at the same time, including the one a restore uses to avoid overwriting the plugin while it is running.
 * Added: Master Reset can now also delete RestorePilot's own stored backups and rollback points, for when a site is being handed to someone else and should not carry copies of the previous content. It is off by default and has to be ticked deliberately, because those backups are the only way to undo a reset.
 
