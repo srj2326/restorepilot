@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.1
+Stable tag: 0.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,12 @@ Yes. Use `wp restorepilot backup` for a full backup, `wp restorepilot backup --d
 RestorePilot stops immediately, removes maintenance mode, and writes the full error to the Logs tab. A pre-restore rollback point may be available, but you should review the logs and verify the site before retrying.
 
 == Changelog ==
+
+= 0.5.2 =
+* Fixed: a restore could stop partway through with a database error about a duplicate entry. Two background workers could end up working from the same saved position -- the position was read a moment before the worker took the lock that makes it the only one running -- so one repeated work the other had already done. The position is now read after the lock is held, and the lock itself is now settled by the database rather than by a check that two workers could pass at once.
+* Improved: every step of a backup or restore used to sit idle for five seconds before the next one began. The signal meant to start the next step immediately was sent while the current one still held its lock, so it was always turned away and a five-second fallback timer started every step instead. Steps now follow on immediately -- measured across a full restore, handovers went from a flat five seconds to well under one.
+* Fixed: the plugin's own header still said it was tested up to WordPress 7.0 while the readme said 7.1, which is the more likely reason installs kept showing an older compatibility figure than the readme claimed.
+* Changed: the plugin is now organised into separate files by area -- backup, restore, database, storage, jobs, locks and so on -- instead of one very large file. Nothing about how it behaves has changed; this makes the code possible to navigate and review.
 
 = 0.5.1 =
 * Fixed: every restore created an extra administrator account, whether or not the "Create a new admin login" box was ticked, and its password appeared once and was then gone. If you have restored a site with this plugin, check Users for an account named `admin_` followed by six random characters and delete any you did not ask for.

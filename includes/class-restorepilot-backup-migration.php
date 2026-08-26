@@ -24,7 +24,7 @@ final class RestorePilot_Backup_Migration {
   use RestorePilot_Maintenance;
   use RestorePilot_Support;
 
-  const VERSION = '0.5.1';
+  const VERSION = '0.5.2';
   const SLUG = 'restorepilot-backup-migration';
   const NONCE = 'restorepilot_nonce';
   const PART_SIZE = 104857600; // 100 MB
