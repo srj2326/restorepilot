@@ -1232,6 +1232,7 @@ document.addEventListener('click', function(e) {
   var confirmBtn = document.getElementById('rp-master-reset-confirm');
   var input      = document.getElementById('rp-master-reset-confirm-input');
   var ackBox     = document.getElementById('rp-master-reset-ack');
+  var purgeBox   = document.getElementById('rp-master-reset-purge-backups');
   var errorBox   = document.getElementById('rp-master-reset-error');
 
   if (!modal || !openBtn) { return; }
@@ -1283,6 +1284,9 @@ document.addEventListener('click', function(e) {
 
       var data = new FormData();
       data.set('action',       'restorepilot_master_reset');
+      // Empty, never '0' -- see post_bool(): a submitted '0' used to read as
+      // true, which on this action would delete backups nobody asked to lose.
+      data.set('purge_backups', (purgeBox && purgeBox.checked) ? '1' : '');
       data.set('_ajax_nonce',  restorePilotData.nonce);
       data.set('confirm_word', 'RESET');
 

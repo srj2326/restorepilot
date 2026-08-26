@@ -898,6 +898,21 @@ trait RestorePilot_AdminUi {
               <input type="checkbox" id="rp-master-reset-ack">
               <span><?php echo esc_html__('I have a full backup, or I understand this site cannot be recovered.', 'restorepilot-backup-migration'); ?></span>
             </label>
+            <?php
+            // Off by default, and deliberately so. These backups are the only
+            // way back from this screen, and the cost of the two mistakes is
+            // not symmetric: keeping backups nobody wanted wastes disk space,
+            // while deleting backups somebody wanted loses the site. It is
+            // offered at all because a site being handed to someone else
+            // should not carry full copies of the previous owner's content.
+            ?>
+            <label class="rp-modal__ack">
+              <input type="checkbox" id="rp-master-reset-purge-backups">
+              <span>
+                <?php echo esc_html__('Also delete RestorePilot\'s stored backups and rollback points', 'restorepilot-backup-migration'); ?>
+                <span class="rp-toggle__desc"><?php echo esc_html__('Leave this unticked to keep them. They are the only way to undo this reset. Tick it when handing the site to someone else, so it does not carry copies of the previous content.', 'restorepilot-backup-migration'); ?></span>
+              </span>
+            </label>
             <div class="rp-modal__warning">
               <span class="dashicons dashicons-warning" aria-hidden="true"></span>
               <span><?php echo esc_html__('You are about to permanently delete all site content, uploads, plugins, themes, and user accounts. Only the current administrator account will be kept. This action cannot be reversed.', 'restorepilot-backup-migration'); ?></span>

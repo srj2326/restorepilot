@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.2
+Stable tag: 0.5.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,10 @@ Yes. Use `wp restorepilot backup` for a full backup, `wp restorepilot backup --d
 RestorePilot stops immediately, removes maintenance mode, and writes the full error to the Logs tab. A pre-restore rollback point may be available, but you should review the logs and verify the site before retrying.
 
 == Changelog ==
+
+= 0.5.3 =
+* Fixed: Master Reset deleted RestorePilot itself, along with the other plugins it is meant to remove. Reorganising the code in 0.5.2 moved the check that told the reset which plugin folder was its own, so it stopped recognising itself. If you ran Master Reset on 0.5.2 the plugin was removed but your stored backups were not -- reinstall RestorePilot and they will still be listed. Six other places that located the plugin's own files the same way were corrected at the same time, including the one a restore uses to avoid overwriting the plugin while it is running.
+* Added: Master Reset can now also delete RestorePilot's own stored backups and rollback points, for when a site is being handed to someone else and should not carry copies of the previous content. It is off by default and has to be ticked deliberately, because those backups are the only way to undo a reset.
 
 = 0.5.2 =
 * Fixed: Master Reset deleted every plugin's files but left behind the database tables those plugins had created, so a site it described as reset to a clean WordPress installation still carried all of their data -- unreadable with the plugin gone, but still taking up space and still included in every backup afterwards. On the site this was found on that was 175 tables and over 200 MB left behind. Those tables are now removed as well, and the confirmation screen says so before you agree to it.

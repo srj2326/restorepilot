@@ -41,7 +41,7 @@ trait RestorePilot_Storage {
    * Returns false if the operation was refused, or if anything inside $dir
    * could not be removed.
    */
-  private static function master_reset_wipe_dir(string $dir, string $allowed_parent): bool {
+  private static function master_reset_wipe_dir(string $dir, string $allowed_parent, bool $include_own_storage = false): bool {
     $real_dir    = realpath($dir);
     $real_parent = realpath($allowed_parent);
     if ($real_dir === false || $real_parent === false || !is_dir($real_dir)) { return false; }
@@ -61,7 +61,8 @@ trait RestorePilot_Storage {
     // first" safety copy this same reset's own confirmation modal tells
     // the user to make, if that download step were skipped in favor of the
     // one already sitting on the server.
-    $real_storage_dir = realpath(self::storage_dir());
+    // Kept unless the operator explicitly asked for it to go too.
+    $real_storage_dir = $include_own_storage ? false : realpath(self::storage_dir());
 
     $all_removed = true;
     foreach (new DirectoryIterator($real_dir) as $item) {

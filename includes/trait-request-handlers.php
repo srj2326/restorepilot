@@ -820,6 +820,9 @@ trait RestorePilot_RequestHandlers {
     // the post-reset usability invariants that already existed.
     $reset_problems = [];
     $dropped_foreign = 0;
+    // Explicitly asked for, and off unless it was: these backups are the only
+    // route back from this action.
+    $purge_backups = self::post_bool('purge_backups');
 
     // 1a. Drop tables other plugins created.
     //
@@ -940,7 +943,7 @@ trait RestorePilot_RequestHandlers {
     // 4. Wipe all uploads (keep the uploads root directory itself)
     $upload = wp_upload_dir(null, false);
     if (empty($upload['error']) && !empty($upload['basedir'])) {
-      if (!self::master_reset_wipe_dir($upload['basedir'], self::content_dir())) {
+      if (!self::master_reset_wipe_dir($upload['basedir'], self::content_dir(), $purge_backups)) {
         $reset_problems[] = 'one or more files in the uploads directory could not be removed';
       }
     } else {
@@ -1029,7 +1032,8 @@ trait RestorePilot_RequestHandlers {
       ], 500);
     }
 
-    self::write_log('Master Reset complete. Site reset to clean WordPress state. Dropped ' . $dropped_foreign . ' table(s) belonging to other plugins.');
+    self::write_log('Master Reset complete. Site reset to clean WordPress state. Dropped ' . $dropped_foreign
+      . ' table(s) belonging to other plugins. Stored backups were ' . ($purge_backups ? 'deleted at the operator\'s request.' : 'kept.'));
 
     wp_send_json_success([
       'message'  => $dropped_foreign > 0

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: RestorePilot Backup & Migration
  * Description: Back up, restore, and migrate WordPress sites with serialized-safe URL replacement.
- * Version:     0.5.2
+ * Version:     0.5.3
  * Author:      Surajit Roy
  * Author URI:  https://profiles.wordpress.org/srjdev/
  * Text Domain: restorepilot-backup-migration
