@@ -211,14 +211,74 @@ trait RestorePilot_Jobs {
     ], $extra));
   }
 
+  /**
+   * Stops a running backup as soon as the operator cancels it.
+   *
+   * Called at every table and every row, which reads as though it stops
+   * promptly -- but get_option() caches per process, so a worker that read the
+   * job at the start of its chunk kept seeing "running" no matter what the
+   * Cancel button wrote. Cancelling only took effect when the next chunk began
+   * in a fresh process, up to a whole chunk later.
+   *
+   * The read is therefore uncached, and throttled to once a second so that
+   * calling it per row does not mean a query per row. A cancel is noticed
+   * within a second instead of within twenty.
+   */
   private static function throw_if_backup_cancelled(string $job_id): void {
     if ($job_id === '') {
       return;
     }
 
-    $job = self::get_backup_job($job_id);
+    static $last_checked = 0.0;
+    static $last_job_id = '';
+
+    $now = microtime(true);
+    // Always check immediately when the job being watched changes, so a new
+    // chunk never inherits the previous one's throttle.
+    if ($job_id === $last_job_id && ($now - $last_checked) < 1.0) {
+      return;
+    }
+    $last_checked = $now;
+    $last_job_id = $job_id;
+
+    $job = self::get_backup_job($job_id, true);
     if (($job['status'] ?? '') === 'canceled') {
       throw new RestorePilot_Backup_Cancelled_Exception(__('Backup canceled.', 'restorepilot-backup-migration'));
+    }
+  }
+
+  /**
+   * Stops a restore that an administrator has ended from the maintenance page.
+   *
+   * Ending a restore marks the job terminal and releases the locks, but a
+   * worker already inside a chunk knew nothing about it and carried on writing
+   * for the rest of that chunk -- with the locks already gone, so a new restore
+   * could start alongside it. Two restores writing at once is how one ends up
+   * dropping the other's tables.
+   *
+   * Same shape as the backup check above, and the same reasons: uncached,
+   * because a cached read is what hid this; throttled, because it is called
+   * often enough that a query each time would be felt.
+   */
+  private static function throw_if_restore_abandoned(string $job_id): void {
+    if ($job_id === '') {
+      return;
+    }
+
+    static $last_checked = 0.0;
+    static $last_job_id = '';
+
+    $now = microtime(true);
+    if ($job_id === $last_job_id && ($now - $last_checked) < 1.0) {
+      return;
+    }
+    $last_checked = $now;
+    $last_job_id = $job_id;
+
+    $job = self::get_restore_job($job_id, true);
+    $status = (string) ($job['status'] ?? '');
+    if ($status !== '' && in_array($status, ['error', 'stale', 'complete'], true)) {
+      throw new RuntimeException(__('This restore was ended before it finished. Recover your database from a pre-restore rollback point.', 'restorepilot-backup-migration'));
     }
   }
 

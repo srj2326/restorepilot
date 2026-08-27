@@ -673,7 +673,8 @@ trait RestorePilot_Restore {
           // bounds a resumption that has to skip through many already-done
           // tables before reaching any new work, not just one that is
           // actively inserting.
-          self::throw_if_restore_chunk_time_exceeded();
+          self::throw_if_restore_abandoned($job_id);
+        self::throw_if_restore_chunk_time_exceeded();
 
           // Finalize whichever table this stream was just actively working
           // on (fresh insert or mid-table resume), if any.
@@ -878,6 +879,7 @@ trait RestorePilot_Restore {
         // before the 200th row was even reached. microtime() is cheap
         // enough not to need throttling to a row count at all.
         $row_counter++;
+        self::throw_if_restore_abandoned($job_id);
         self::throw_if_restore_chunk_time_exceeded();
       });
 
@@ -1389,6 +1391,7 @@ trait RestorePilot_Restore {
     $own_plugin_rel = 'plugins/' . basename(self::plugin_root_dir()) . '/';
     for ($i = $start_index; $i < $zip->num_files(); $i++) {
       try {
+        self::throw_if_restore_abandoned($job_id);
         self::throw_if_restore_chunk_time_exceeded();
       } catch (RestorePilot_Restore_Chunk_Yield_Exception $e) {
         // Persist how far this chunk actually got BEFORE yielding, forcing
