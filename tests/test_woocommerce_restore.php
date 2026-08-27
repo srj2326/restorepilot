@@ -34,8 +34,12 @@ function call_private($name, $args = []) {
 }
 
 if (!class_exists('WooCommerce')) {
-    echo "SKIP  WooCommerce is not active on this site\n";
-    echo "ALL CHECKS PASSED\n";
+    // Deliberately does NOT print a passing line. This test skipping is not a
+    // neutral event: it means the store this suite relies on is not loaded,
+    // usually because an earlier restore test put back a backup that predates
+    // it. Announcing a pass here let the suite report green while its largest
+    // test checked nothing.
+    echo "SKIP  WooCommerce is not active on this site, so nothing was verified\n";
     exit(0);
 }
 

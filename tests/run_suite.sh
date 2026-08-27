@@ -28,6 +28,7 @@ health_check() {
   return $?
 }
 
+passed=0; failed=0; skipped=0
 echo "started: $(date)" > "$OUT"
 
 php_run "$S/reset_site_state.php" >> "$OUT" 2>&1
@@ -49,9 +50,20 @@ for t in "$@"; do
   echo "$r" | grep -qE 'Fatal error|Uncaught' && reason="${reason:+$reason, }fatal error"
   echo "$r" | grep -qE 'ALL CHECKS PASSED|ALL [0-9]+ CHECKS PASSED' || reason="${reason:+$reason, }no completion line"
 
-  if [ -z "$reason" ]; then
+  # A test that could not run is not a test that passed. test_woocommerce_restore
+  # skips itself when WooCommerce is inactive -- which an earlier restore test in
+  # this same suite causes, by restoring a backup that predates the store -- and
+  # it used to say ALL CHECKS PASSED on the way out. The suite then reported
+  # green while its largest test had checked nothing at all. Skips are now their
+  # own outcome, counted apart from passes and named in the summary.
+  if echo "$r" | grep -qE '^SKIP '; then
+    skipped=$((skipped + 1))
+    echo "SKIP  (${e}s)  $t.php  -- $(echo "$r" | grep -E '^SKIP ' | head -1 | sed 's/^SKIP  *//')" >> "$OUT"
+  elif [ -z "$reason" ]; then
+    passed=$((passed + 1))
     echo "PASS  (${e}s)  $t.php" >> "$OUT"
   else
+    failed=$((failed + 1))
     echo "=====================================" >> "$OUT"
     echo "FAIL  (${e}s)  $t.php  [$reason]" >> "$OUT"
     echo "$r" | grep -E '^FAIL |FAILURE\(S\)|Fatal error|Uncaught' | head -20 >> "$OUT"
@@ -75,5 +87,9 @@ for t in "$@"; do
   fi
 done
 
+echo "" >> "$OUT"
+echo "$passed passed, $failed failed, $skipped skipped" >> "$OUT"
 echo "finished: $(date)" >> "$OUT"
 echo "DONE" >> "$OUT"
+# A skip is not a pass, so it is not a green run either.
+[ "$failed" -eq 0 ] && [ "$skipped" -eq 0 ]
