@@ -10,6 +10,10 @@
  *
  * Deliberately talks to the database directly and does not boot WordPress:
  * booting is the thing that fails when the site is in this state.
+ *
+ * Usage: reset_site_state.php [plugin/plugin.php ...]
+ *   Any extra arguments name plugins to leave active, on top of RestorePilot
+ *   itself -- the preconditions of the test that is about to run.
  */
 
 $socket = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
@@ -95,18 +99,35 @@ while ($res && ($row = $res->fetch_row())) {
 }
 if ($dropped) { $cleared[] = $dropped . ' scratch table(s)'; }
 
-// 3. active_plugins naming fixture plugins whose directories are gone. Left
-//    alone, WordPress tries to include files that do not exist.
+// 3. active_plugins is SET, not merely pruned.
+//
+//    Pruning entries whose files are gone is necessary -- WordPress tries to
+//    include them and dies -- but it only ever removes, and a plugin whose
+//    files exist survives forever once anything activates it. That is not
+//    hypothetical: test_woocommerce_restore restores a backup taken with
+//    WooCommerce active, so WooCommerce stayed active for every test that
+//    followed, and Action Scheduler's 'shutdown' hook then queried a database
+//    connection those test processes had already closed and died there --
+//    after their own checks had passed. Adding preconditions without also
+//    removing what the previous test left behind fixed nothing.
+//
+//    So the list becomes exactly RestorePilot plus whatever this test asked
+//    for, and each test starts from the same known set rather than from the
+//    residue of the one before it.
 $res = $db->query("SELECT option_value FROM wp_options WHERE option_name = 'active_plugins'");
 $row = $res ? $res->fetch_row() : null;
 if ($row) {
     $active = @unserialize($row[0]);
     if (is_array($active)) {
-        $kept = array_values(array_filter($active, function ($entry) use ($site) {
-            return is_string($entry) && is_file($site . '/wp-content/plugins/' . $entry);
-        }));
-        if (!in_array($self, $kept, true) && is_file($site . '/wp-content/plugins/' . $self)) {
-            $kept[] = $self;
+        $baseline = array_merge([$self], array_slice($argv, 1));
+        $kept = [];
+        foreach ($baseline as $entry) {
+            // Never name a file that is not there; that is the failure the
+            // pruning existed to prevent, and it applies to the baseline too.
+            if (is_string($entry) && $entry !== '' && !in_array($entry, $kept, true)
+                && is_file($site . '/wp-content/plugins/' . $entry)) {
+                $kept[] = $entry;
+            }
         }
         if ($kept !== $active) {
             $stmt = $db->prepare("UPDATE wp_options SET option_value = ? WHERE option_name = 'active_plugins'");

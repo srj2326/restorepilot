@@ -38,7 +38,23 @@ if ! health_check; then
   exit 1
 fi
 
+# Plugins a given test needs active. Kept here rather than in the reset so the
+# reset stays a general-purpose tool and each requirement is stated next to the
+# test that has it -- and so no other test pays for loading them.
+test_preconditions() {
+  case "$1" in
+    test_woocommerce_restore) echo "woocommerce/woocommerce.php" ;;
+    *) echo "" ;;
+  esac
+}
+
 for t in "$@"; do
+  # Establish this test's preconditions immediately before it runs, not as a
+  # side effect of the previous test's cleanup.
+  pre=$(test_preconditions "$t")
+  reset_out=$(php_run "$S/reset_site_state.php" ${pre} 2>&1)
+  [ -n "$reset_out" ] && echo "$reset_out" >> "$OUT"
+
   s=$(date +%s)
   r=$(php_run "$S/$t.php" 2>&1)
   code=$?
