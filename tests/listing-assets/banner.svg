@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1544 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1544" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f4c7a"/>
+      <stop offset="0.55" stop-color="#135e96"/>
+      <stop offset="1" stop-color="#2271b1"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1544" height="500" fill="url(#bg)"/>
+
+  <!-- Oversized restore mark, bled off the right edge and held back to a low
+       opacity so it reads as texture behind the type rather than a second
+       focal point competing with it. -->
+  <g opacity="0.10" transform="translate(1290,250) scale(2.35)">
+    <path d="M 0 -74 A 74 74 0 1 1 -74 0" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="butt"/>
+    <polygon points="-74,-42 -48,4 -100,4" fill="#ffffff"/>
+  </g>
+
+  <!-- Solid restore mark, sized to sit optically level with the wordmark. -->
+  <g transform="translate(180,250) scale(0.72)">
+    <path d="M 0 -74 A 74 74 0 1 1 -74 0" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="butt"/>
+    <polygon points="-74,-42 -48,4 -100,4" fill="#ffffff"/>
+  </g>
+
+  <text x="290" y="232"
+        font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-size="82" font-weight="700" fill="#ffffff" letter-spacing="-1.5">RestorePilot</text>
+
+  <text x="292" y="292"
+        font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-size="33" font-weight="400" fill="#c3d9f0" letter-spacing="0.2">Backup, restore, and migrate WordPress sites</text>
+
+  <!-- Three proof points, evenly spaced on a shared baseline. Each is a real
+       capability, not a slogan. -->
+  <g font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="25" font-weight="500" fill="#ffffff" opacity="0.92">
+    <circle cx="296" cy="352" r="4.5" fill="#ffffff" opacity="0.55"/>
+    <text x="313" y="360">No size limit</text>
+
+    <circle cx="536" cy="352" r="4.5" fill="#ffffff" opacity="0.55"/>
+    <text x="553" y="360">Resumes after timeouts</text>
+
+    <circle cx="908" cy="352" r="4.5" fill="#ffffff" opacity="0.55"/>
+    <text x="925" y="360">Rollback point before every restore</text>
+  </g>
+</svg>

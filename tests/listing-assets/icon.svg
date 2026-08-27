@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#135e96"/>
+      <stop offset="1" stop-color="#2271b1"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" fill="url(#bg)"/>
+
+  <!-- Restore arc: starts at top, sweeps clockwise all the way round to the
+       left, leaving the top-left quadrant open for the arrowhead. -->
+  <path d="M 128 54 A 74 74 0 1 1 54 128" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="butt"/>
+
+  <!-- Arrowhead at the arc's end (54,128), pointing up — the direction of
+       travel there. Symmetric about x=54; base straddles the stroke end so
+       the two read as one continuous mark. -->
+  <polygon points="54,86 80,132 28,132" fill="#ffffff"/>
+</svg>

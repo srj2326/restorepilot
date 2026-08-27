@@ -1,0 +1,571 @@
+<title>Shipping to the Directory</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #F4F6F1;
+    --surface: #FFFFFF;
+    --surface-2: #ECF0E7;
+    --text: #16201A;
+    --text-soft: #4B5A50;
+    --text-faint: #7C8B80;
+    --border: #D7DED1;
+    --border-strong: #BFC9B7;
+    --accent: #2E7D4F;
+    --accent-strong: #245F3D;
+    --accent-contrast: #FFFFFF;
+    --warn: #A8722E;
+    --warn-surface: #FBF1E2;
+    --warn-border: #E2C68C;
+    --ok-surface: #E9F3EC;
+    --ok-border: #BFDCC8;
+    --danger: #A8402E;
+    --danger-surface: #FBEBE6;
+    --danger-border: #E6B39F;
+    --font-display: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-body: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10160F;
+      --surface: #171F1A;
+      --surface-2: #1C2620;
+      --text: #E7EEE7;
+      --text-soft: #A9BAAE;
+      --text-faint: #7C8F80;
+      --border: #2B372F;
+      --border-strong: #3B4A40;
+      --accent: #58BA82;
+      --accent-strong: #79CFA0;
+      --accent-contrast: #0B140E;
+      --warn: #E0A94D;
+      --warn-surface: #26200F;
+      --warn-border: #4A3B1C;
+      --ok-surface: #16261C;
+      --ok-border: #2C4A38;
+      --danger: #E28871;
+      --danger-surface: #271712;
+      --danger-border: #4A2C22;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #10160F;
+    --surface: #171F1A;
+    --surface-2: #1C2620;
+    --text: #E7EEE7;
+    --text-soft: #A9BAAE;
+    --text-faint: #7C8F80;
+    --border: #2B372F;
+    --border-strong: #3B4A40;
+    --accent: #58BA82;
+    --accent-strong: #79CFA0;
+    --accent-contrast: #0B140E;
+    --warn: #E0A94D;
+    --warn-surface: #26200F;
+    --warn-border: #4A3B1C;
+    --ok-surface: #16261C;
+    --ok-border: #2C4A38;
+    --danger: #E28871;
+    --danger-surface: #271712;
+    --danger-border: #4A2C22;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16.5px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent-strong); }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ---------- Header ---------- */
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .eyebrow .sep { color: var(--border-strong); }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(30px, 5vw, 40px);
+    letter-spacing: -0.015em;
+    line-height: 1.12;
+    margin: 10px 0 14px;
+    text-wrap: balance;
+    color: var(--text);
+  }
+
+  .lede {
+    font-size: 17.5px;
+    color: var(--text-soft);
+    max-width: 62ch;
+    margin: 0 0 8px;
+  }
+  .lede strong { color: var(--text); font-weight: 600; }
+
+  /* ---------- Status strip ---------- */
+
+  .status {
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 18px;
+    background: var(--ok-surface);
+    border: 1px solid var(--ok-border);
+    border-radius: 8px;
+  }
+  .status-title {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-strong);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .status-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 15px;
+  }
+  .status-item .mark {
+    font-family: var(--font-mono);
+    color: var(--accent-strong);
+    font-weight: 600;
+    flex: none;
+  }
+  .status-item .label { color: var(--text); }
+  .status-item .note { color: var(--text-faint); font-size: 13.5px; }
+
+  /* ---------- Needed-from-you ---------- */
+
+  .needed {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+  .need-card {
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .need-card .k {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .need-card .v {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    color: var(--text);
+    margin-top: 3px;
+    word-break: break-word;
+  }
+
+  /* ---------- Diagram: repo shape ---------- */
+
+  .diagram-block { margin: 44px 0 40px; }
+  .diagram-block h2 { margin-bottom: 6px; }
+  .diagram-block .sub { color: var(--text-soft); font-size: 15px; margin: 0 0 20px; max-width: 60ch; }
+
+  .repo-diagram {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 620px) {
+    .repo-diagram { grid-template-columns: 1fr; }
+  }
+  .repo-node {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 16px 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .repo-node.is-you {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+  }
+  .repo-node .path {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent-strong);
+  }
+  .repo-node .desc { font-size: 13.5px; color: var(--text-soft); line-height: 1.5; }
+  .repo-node .flag {
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: var(--surface-2);
+    color: var(--text-faint);
+  }
+  .repo-node.is-you .flag {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+
+  /* ---------- Steps ---------- */
+
+  .steps { margin-top: 48px; display: flex; flex-direction: column; gap: 44px; }
+
+  .step {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 18px;
+    position: relative;
+  }
+  .step::before {
+    content: "";
+    position: absolute;
+    left: 25px;
+    top: 54px;
+    bottom: -44px;
+    width: 1px;
+    background: var(--border);
+  }
+  .step:last-child::before { display: none; }
+
+  .step-num {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 20px;
+    color: var(--accent-strong);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+  }
+
+  .step-body { padding-top: 4px; min-width: 0; }
+
+  .step h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 20px;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .step p {
+    margin: 0 0 12px;
+    color: var(--text-soft);
+    max-width: 62ch;
+    font-size: 15.5px;
+  }
+  .step p:last-child { margin-bottom: 0; }
+  .step code.inline {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--surface-2);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+    color: var(--text);
+  }
+
+  pre {
+    margin: 12px 0;
+    padding: 14px 16px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+  pre code {
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre;
+    tab-size: 2;
+  }
+  pre .comment { color: var(--text-faint); }
+
+  .terminal-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 14px 0 -2px;
+  }
+
+  /* ---------- Callouts ---------- */
+
+  .callout {
+    margin: 14px 0;
+    padding: 13px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--warn-border);
+    background: var(--warn-surface);
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+  }
+  .callout .glyph {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--warn);
+    flex: none;
+    line-height: 1.4;
+  }
+  .callout p { margin: 0; color: var(--text); font-size: 14.5px; max-width: none; }
+  .callout p + p { margin-top: 6px; }
+  .callout strong { color: var(--text); }
+
+  .callout.danger {
+    border-color: var(--danger-border);
+    background: var(--danger-surface);
+  }
+  .callout.danger .glyph { color: var(--danger); }
+
+  .callout.ok {
+    border-color: var(--ok-border);
+    background: var(--ok-surface);
+  }
+  .callout.ok .glyph { color: var(--accent-strong); }
+
+  /* ---------- Optional section ---------- */
+
+  .optional-wrap {
+    margin-top: 56px;
+    padding-top: 32px;
+    border-top: 1px solid var(--border);
+  }
+  .optional-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    padding: 2px 7px;
+    margin-bottom: 10px;
+  }
+  .optional-wrap h3 { margin: 0 0 8px; font-family: var(--font-display); font-size: 19px; }
+  .optional-wrap p { color: var(--text-soft); font-size: 15px; max-width: 64ch; }
+  .spec-list {
+    margin: 14px 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+  .spec-list li {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 12px;
+    font-size: 14px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .spec-list li:last-child { border-bottom: none; }
+  .spec-list .k { font-family: var(--font-mono); color: var(--text-soft); }
+  .spec-list .v { color: var(--text); }
+
+  /* ---------- Footer ---------- */
+
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-faint);
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+  footer strong { color: var(--text-soft); }
+</style>
+
+<div class="page">
+
+  <div class="eyebrow">RestorePilot Backup &amp; Migration <span class="sep">/</span> v0.5.0 <span class="sep">/</span> First release</div>
+  <h1>Shipping to the Directory</h1>
+  <p class="lede">
+    WordPress.org approved your plugin six days ago, but <strong>nothing is public yet</strong> — the listing stays invisible until you push files over SVN. That's good timing: today's build has five real fixes the reviewed snapshot didn't, so this is the version that should go live first.
+  </p>
+
+  <div class="status">
+    <div class="status-title">Already handled on this Mac</div>
+    <div class="status-item"><span class="mark">✓</span><span class="label">Subversion client installed</span><span class="note">— svn 1.14.5</span></div>
+    <div class="status-item"><span class="mark">✓</span><span class="label">Release files staged and verified</span><span class="note">— trunk and the 0.5.0 tag are byte-for-byte identical</span></div>
+    <div class="status-item"><span class="mark">✓</span><span class="label">Today's build, not the 6-day-old one</span><span class="note">— includes the restore-recovery fixes</span></div>
+  </div>
+
+  <div class="needed">
+    <div class="need-card"><div class="k">WordPress.org username</div><div class="v">srjdev</div></div>
+    <div class="need-card"><div class="k">SVN password</div><div class="v">separate — get it below</div></div>
+    <div class="need-card"><div class="k">Time needed</div><div class="v">~5 minutes</div></div>
+  </div>
+
+  <div class="diagram-block">
+    <h2>The shape of the repository</h2>
+    <p class="sub">Three folders, each with a different job. This trips up almost everyone the first time — worth thirty seconds before you touch a terminal.</p>
+    <div class="repo-diagram">
+      <div class="repo-node is-you">
+        <div class="path">trunk/</div>
+        <div class="flag">you'll edit this</div>
+        <div class="desc">The live, current code. No wrapper folder inside it — unlike the zip you're used to, the plugin's own files sit directly in <code class="inline">trunk/</code>.</div>
+      </div>
+      <div class="repo-node is-you">
+        <div class="path">tags/0.5.0/</div>
+        <div class="flag">you'll edit this</div>
+        <div class="desc">A frozen copy of one exact release. What a user gets when they install version 0.5.0 specifically. Same contents as trunk today.</div>
+      </div>
+      <div class="repo-node">
+        <div class="path">assets/</div>
+        <div class="flag">optional, later</div>
+        <div class="desc">Icon, banner, screenshots for the listing page itself. Never installed on anyone's site. Covered at the end of this guide.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="steps">
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Get your SVN password</h3>
+        <p>
+          It is <strong>not</strong> your WordPress.org login password — a separate one, used only for SVN. Open your profile and set or copy it:
+        </p>
+        <p><a href="https://profiles.wordpress.org/me/profile/edit/group/3/?screen=svn-password" target="_blank" rel="noopener">profiles.wordpress.org → Account &amp; Security → SVN password</a></p>
+        <div class="callout">
+          <span class="glyph">!</span>
+          <p>Your username is case-sensitive: exactly <strong>srjdev</strong>, as registered.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Check out the repository</h3>
+        <p>Open Terminal and pull down your (currently empty) plugin repo:</p>
+        <div class="terminal-label">Terminal</div>
+        <pre><code>mkdir -p ~/Desktop/restorepilot-svn
+svn checkout https://plugins.svn.wordpress.org/restorepilot-backup-migration ~/Desktop/restorepilot-svn</code></pre>
+        <p>It may ask you to accept a certificate the first time — type <code class="inline">p</code> to accept permanently. You should see <code class="inline">trunk/</code> and <code class="inline">tags/</code> already there, empty. That matches the email: nothing's been uploaded yet.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Copy in today's release</h3>
+        <p>This pulls in the files already staged and verified on this Mac — the fixed 0.5.0 build, not the older reviewed one:</p>
+        <div class="terminal-label">Terminal</div>
+        <pre><code>SVN_STAGE="/private/tmp/claude-501/-Users-surajitroy-Local-Sites-morecalculators-dev-app-public-wp-content-plugins-restorepilot-backup-migration/7f9a6ea2-0e0d-47e3-9219-e411bdf20a00/scratchpad/svn-stage"
+
+mkdir -p ~/Desktop/restorepilot-svn/trunk ~/Desktop/restorepilot-svn/tags/0.5.0
+cp -R "$SVN_STAGE/trunk/." ~/Desktop/restorepilot-svn/trunk/
+cp -R "$SVN_STAGE/tags/0.5.0/." ~/Desktop/restorepilot-svn/tags/0.5.0/</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Tell SVN about the new files</h3>
+        <p><code class="inline">add</code> only marks files for the next commit — nothing leaves your Mac yet. Then look at exactly what's about to ship:</p>
+        <div class="terminal-label">Terminal</div>
+        <pre><code>cd ~/Desktop/restorepilot-svn
+svn add --force trunk tags
+svn status</code></pre>
+        <p>Every line should start with <code class="inline">A</code> (added). If anything unexpected shows up, stop here and ask before continuing.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Commit — this is the moment it goes live</h3>
+        <p>One command, and it's public:</p>
+        <div class="terminal-label">Terminal</div>
+        <pre><code>svn commit -m "Initial release 0.5.0" --username srjdev</code></pre>
+        <p>It will prompt for the SVN password from step 1. Typing is invisible in the terminal — that's normal, keep typing and press return.</p>
+        <div class="callout danger">
+          <span class="glyph">→</span>
+          <p>After this finishes, anyone can install your plugin. Nothing before this step is public — this is the one to pause on if you want a last look.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Check it went live</h3>
+        <p>Visit your listing — usually ready within a few minutes:</p>
+        <p><a href="https://wordpress.org/plugins/restorepilot-backup-migration/" target="_blank" rel="noopener">wordpress.org/plugins/restorepilot-backup-migration</a></p>
+        <div class="callout ok">
+          <span class="glyph">✓</span>
+          <p>WordPress.org's own email said search results and your profile can take up to 72 hours to catch up — that's normal and separate from the plugin actually being installable.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="optional-wrap">
+    <span class="optional-tag">Optional — doesn't block going live</span>
+    <h3>Listing images, whenever you're ready</h3>
+    <p>Without these, the listing just uses WordPress.org's default icon. Add them later with the same add-and-commit pattern, targeting <code class="inline">assets/</code> at the repo root instead of <code class="inline">trunk/</code>.</p>
+    <ul class="spec-list">
+      <li><span class="k">icon-256x256.png</span><span class="v">Square icon, shown in search results and your listing</span></li>
+      <li><span class="k">banner-1544x500.png</span><span class="v">Header banner across the top of your listing page</span></li>
+      <li><span class="k">screenshot-1.png, -2.png…</span><span class="v">Numbered to match a "== Screenshots ==" section you'd add to readme.txt</span></li>
+    </ul>
+  </div>
+
+  <footer>
+    Every command above runs in <strong>your</strong> Terminal with <strong>your</strong> password — nothing here was or will be entered on your behalf. If <code class="inline">svn status</code> in step 4 shows anything you don't recognize, or the commit errors out, paste the output back and it can be sorted before anything ships.
+  </footer>
+
+</div>

@@ -1,0 +1,25 @@
+<?php
+// Runs exactly ONE chunk of the REAL restore job, in its own fresh process
+// — same reasoning as run_one_restore_chunk.php earlier this session, but
+// for the actual production restore, with the plugin's own real ~20s
+// chunk budget (no override) and without blocking pre_http_request, so the
+// genuine loopback dispatch can still fire too if it ever starts working —
+// harmless either way since the per-chunk worker lock makes double-driving
+// safe (whichever gets there first wins; the other finds the lock held and
+// returns immediately).
+
+$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+
+// Same gotcha documented in project memory from earlier this session: a raw
+// CLI invocation is not exempt from should_block_for_maintenance() the way
+// real AJAX/cron dispatch is, so once THIS restore's own earlier chunk
+// enabled maintenance mode, every subsequent chunk driven this way would
+// just get served the maintenance page instead of ever reaching
+// run_restore_job() at all.
+define('WP_CLI', true);
+
+require $site_root . '/wp-load.php';
+
+$job_id = $argv[1];
+$token = $argv[2];
+RestorePilot_Backup_Migration::run_restore_job($job_id, $token);
