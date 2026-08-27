@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.3
+Stable tag: 0.5.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,12 @@ Yes. Use `wp restorepilot backup` for a full backup, `wp restorepilot backup --d
 RestorePilot stops immediately, removes maintenance mode, and writes the full error to the Logs tab. A pre-restore rollback point may be available, but you should review the logs and verify the site before retrying.
 
 == Changelog ==
+
+= 0.5.4 =
+* Fixed: cancelling a backup did not stop it. Cancel marked the backup cancelled, but the process doing the work never saw that. It was reading a copy of the job made when its turn started, and its own progress updates -- which happen every few seconds -- then wrote "still running" back over the cancellation. The backup carried on to the end. Cancelling now takes effect within about a second.
+* Fixed: ending a stuck restore from the maintenance screen did not stop the restore. Ending it released the locks that keep two restores apart, but the process still doing the work carried on writing to the database for the rest of its turn, unaware. A restore started straight afterwards could therefore run alongside one that had not actually stopped, which is how a database ends up holding tables from two different backups. The work now stops within about a second of being ended. If you have ever ended a restore and immediately started another, compare your data against a pre-restore rollback point before trusting it.
+* Fixed: a restore could lose its record of how far it had got when more than one process was involved, causing it to repeat work it had already finished. The same cause as the two above: each update to a job's record was built on a copy that could be out of date, so one process could erase what another had just written.
+* Added: Master Reset can now remove must-use plugins, which it previously always left in place -- so a site it described as clean still had every one of them loading on every request. This is off unless you tick it, and the confirmation lists them by name rather than as a count, because some are installed by your host or by a site-management service and deleting those can break things you cannot reinstall yourself.
 
 = 0.5.3 =
 * Fixed: the duplicate-entry error during a restore that 0.5.2 claimed to fix was not actually fixed. The correction there re-read the restore's saved position after taking the lock that makes a worker the only one running, but WordPress caches that read within a request, so it handed back the same stale copy it already had and two workers could still resume from the same place. It now reads past the cache.
