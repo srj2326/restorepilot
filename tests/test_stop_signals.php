@@ -82,6 +82,36 @@ check('And says something a person can act on',
     stripos($message, 'rollback') !== false, $message);
 delete_option($option);
 
+// ── Success is not abandonment ─────────────────────────────────────────────
+// The abandonment check used to treat 'complete' as one of the statuses
+// meaning "an administrator ended this restore". So when one worker finished
+// normally and a second was still inside its chunk, the second threw, the
+// generic handler caught it, and a restore that had *just succeeded* was
+// rewritten as failed -- with a message telling the operator to recover their
+// database from a rollback point they did not need. Observed for real in the
+// WooCommerce restore log: "Restore completed." followed one second later by
+// "Restore failed: This restore was ended before it finished."
+echo "\n=== a restore another worker already finished ===\n";
+$job_id = 'rp-stop-done-' . wp_generate_password(6, false, false);
+$option = priv('restore_job_option', [$job_id]);
+priv('set_restore_job', [$job_id, ['status' => 'complete', 'phase' => 'complete', 'created' => time()]]);
+
+$thrown = null;
+try { priv('throw_if_restore_abandoned', [$job_id]); } catch (Throwable $e) { $thrown = $e; }
+
+check('A finished job still stops this worker', $thrown !== null);
+check('THE FIX: it is reported as already finished, not as abandoned',
+    $thrown instanceof RestorePilot_Restore_Already_Finished_Exception,
+    $thrown ? get_class($thrown) . ': ' . $thrown->getMessage() : 'nothing thrown');
+check('And carries no instruction to recover from a rollback point',
+    $thrown !== null && stripos($thrown->getMessage(), 'rollback') === false,
+    $thrown ? $thrown->getMessage() : '');
+
+// The status on the record is the part that reaches the operator.
+check('The job is left saying complete, not rewritten as an error',
+    (priv('get_restore_job', [$job_id, true])['status'] ?? '') === 'complete');
+delete_option($option);
+
 // ── The guard has to be cheap: it is called per row ────────────────────────
 echo "\n=== cost, since these run per row ===\n";
 $job_id = 'rp-stop-cost-' . wp_generate_password(6, false, false);

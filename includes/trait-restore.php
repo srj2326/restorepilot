@@ -543,6 +543,14 @@ trait RestorePilot_Restore {
       ]);
       self::write_log('Restore chunk finished, continuing as resumption ' . $checkpoint['resumption'] . ': ' . $job_id);
       $dispatch_next_chunk = true;
+    } catch (RestorePilot_Restore_Already_Finished_Exception $e) {
+      // Another worker finished the job while this one was inside its chunk.
+      // Deliberately placed ahead of the generic handler below and deliberately
+      // writing nothing: the job is already 'complete' and correct, and the
+      // handler below would overwrite that with 'error' plus an instruction to
+      // recover from a rollback point -- for a restore that had just succeeded.
+      // No dispatch either; there is nothing left to continue.
+      self::write_log('Restore already finished by another worker, stopping quietly: ' . $job_id);
     } catch (Throwable $e) {
       self::write_log('Restore job failed: ' . $job_id . '; ' . $e->getMessage());
       $has_rollback = !empty(self::list_restore_rollback_points());

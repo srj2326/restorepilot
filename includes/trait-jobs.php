@@ -306,7 +306,17 @@ trait RestorePilot_Jobs {
 
     $job = self::get_restore_job($job_id, true);
     $status = (string) ($job['status'] ?? '');
-    if ($status !== '' && in_array($status, ['error', 'stale', 'complete'], true)) {
+
+    // 'complete' is not an abandonment. Another worker finishing the job
+    // normally is success, and this one simply has nothing left to do -- so it
+    // stops without touching the job, rather than reporting a restore that has
+    // just succeeded as failed and sending the operator to a rollback point
+    // they do not need.
+    if ($status === 'complete') {
+      throw new RestorePilot_Restore_Already_Finished_Exception('Restore already completed by another worker.');
+    }
+
+    if ($status !== '' && in_array($status, ['error', 'stale'], true)) {
       throw new RuntimeException(__('This restore was ended before it finished. Recover your database from a pre-restore rollback point.', 'restorepilot-backup-migration'));
     }
   }
