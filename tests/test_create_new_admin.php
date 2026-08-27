@@ -84,8 +84,9 @@ global $wpdb;
 
 // === Test 1: create_new_admin_login() itself ===============================
 $users_before = count_users()['total_users'];
-$created = call_private('create_new_admin_login');
-check('Returns a username and password', !empty($created['username']) && !empty($created['password']));
+$created = call_private('create_new_admin_login', ['rp-e2e-one@example.test']);
+check('Returns a username, address and interim password', !empty($created['username']) && !empty($created['email']) && !empty($created['password']));
+check('Honours the chosen address', ($created['email'] ?? '') === 'rp-e2e-one@example.test');
 $users_after = count_users()['total_users'];
 check('Exactly one new user exists', $users_after === $users_before + 1);
 
@@ -94,16 +95,17 @@ if (!empty($created['username'])) {
   check('New user is a real WP_User', $user instanceof WP_User);
   if ($user) {
     check('New user has the administrator role', in_array('administrator', $user->roles, true));
-    $auth = wp_authenticate($created['username'], $created['password']);
-    check('The generated password actually authenticates', !is_wp_error($auth) && $auth instanceof WP_User);
-    check('Username follows the expected admin_<random> pattern', (bool) preg_match('/^admin_[a-z0-9]{6}$/', $created['username']));
+    $auth = wp_authenticate($created['email'], $created['password']);
+    check('The account authenticates by EMAIL, which is how sign-in works now', !is_wp_error($auth) && $auth instanceof WP_User);
+    check('Username is derived from the address, not a generated admin_* name', strpos($created['username'], 'rp-e2e-one') === 0);
   }
 }
 
 // Calling it again must produce a DIFFERENT user (no collision), proving the
 // username_exists() retry loop and the underlying random source both work.
-$created2 = call_private('create_new_admin_login');
-check('A second call creates a different username (no collision reuse)', ($created2['username'] ?? '') !== ($created['username'] ?? ''));
+$created2 = call_private('create_new_admin_login', ['rp-e2e-one@example.test']);
+check('A second call with the same address still yields a distinct account', ($created2['username'] ?? '') !== ($created['username'] ?? ''));
+check('...and a distinct address, since the first is now taken', ($created2['email'] ?? '') !== ($created['email'] ?? ''));
 
 // === Test 2: end-to-end through a real (small) restore, option ON =========
 $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'rp_admin_opt_test_%'");
@@ -161,10 +163,17 @@ $users_after_restore = count_users()['total_users'];
 check('Exactly one new admin user exists after the restore', $users_after_restore === $users_before_restore + 1);
 
 $job_after = call_private('get_restore_job', [$job_id]);
-check('Job record carries new_admin_credentials after completion', !empty($job_after['new_admin_credentials']['username']));
-$restore_created_username = $job_after['new_admin_credentials']['username'] ?? '';
-if ($restore_created_username !== '') {
-  $u = get_user_by('login', $restore_created_username);
+// The job now records only a pointer and an address. A password never goes
+// here: the record is mirrored to a file under uploads to survive the
+// database swap, which would put a plaintext credential on disk.
+check('Job record carries the new admin user id', !empty($job_after['new_admin_user_id']));
+check('Job record carries the account address', !empty($job_after['new_admin_email_final']));
+check('SECURITY: job record holds no password of any kind',
+  strpos(wp_json_encode($job_after), 'new_admin_credentials') === false
+  && empty($job_after['new_admin_password']));
+$restore_created_id = (int) ($job_after['new_admin_user_id'] ?? 0);
+if ($restore_created_id > 0) {
+  $u = get_user_by('id', $restore_created_id);
   check('That user is really an administrator', $u instanceof WP_User && in_array('administrator', $u->roles, true));
 }
 
@@ -180,14 +189,16 @@ if (!defined('DOING_AJAX')) {
   define('DOING_AJAX', true);
 }
 
-// Status-poll response must serve the credentials exactly once, then clear them.
+// The poll tells the page an account is waiting for the password it holds,
+// and names the address to sign in with -- but never sends a credential.
 $_POST['job_id'] = $job_id;
 $_POST['poll_token'] = $job_after['poll_token'] ?? '';
 $poll_json = call_json_handler('handle_restore_status');
-check('First poll response includes new_admin_credentials', !empty($poll_json['data']['new_admin_credentials']['username']));
-
-$poll_json2 = call_json_handler('handle_restore_status');
-check('Second poll response no longer includes credentials (served once, then cleared)', empty($poll_json2['data']['new_admin_credentials']['username']));
+check('Poll response flags that the account awaits its password', !empty($poll_json['data']['new_admin_awaiting_password']));
+check('Poll response names the address to sign in with', !empty($poll_json['data']['new_admin_email']));
+check('SECURITY: poll response contains no password',
+  strpos(wp_json_encode($poll_json), 'new_admin_credentials') === false
+  && empty($poll_json['data']['new_admin_password']));
 unset($_POST['job_id'], $_POST['poll_token']);
 
 // === Test 3: option OFF creates no account =================================
@@ -220,16 +231,25 @@ check('Restore (option OFF) reached complete status', $status2 === 'complete');
 // snapshot — which does not include Test 2's admin (created after the
 // snapshot was taken). That alone drops the total count by one, with
 // nothing to do with whether THIS restore created a new admin. The
-// job's own new_admin_credentials field directly reflects only what
+// job's own new_admin_user_id directly reflects only what
 // create_new_admin_login() did during this specific run.
-check('No new_admin_credentials on the job record when the option is off', empty($job2['new_admin_credentials']['username']));
+check('No admin account is pointed to on the job record when the option is off', empty($job2['new_admin_user_id']));
 
 // --- Cleanup -----------------------------------------------------------------
-foreach ([$created['username'] ?? '', $created2['username'] ?? '', $restore_created_username] as $uname) {
+foreach ([$created['username'] ?? '', $created2['username'] ?? ''] as $uname) {
   if ($uname !== '') {
     $u = get_user_by('login', $uname);
     if ($u) { wp_delete_user($u->ID); }
   }
+}
+// The admin the restore itself made is known by id, not by name: the job
+// record deliberately no longer carries a username. This used to read a
+// $restore_created_username that the email-only rewrite had already removed,
+// so get_user_by('login', null) quietly returned false and the account was
+// never deleted -- every run left another administrator on the site.
+if (!empty($restore_created_id)) {
+  $u = get_user_by('id', (int) $restore_created_id);
+  if ($u) { wp_delete_user($u->ID); }
 }
 $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'rp_admin_opt_test_%'");
 foreach (call_private('discover_volumes', [$backup_path])['paths'] as $p) { @unlink($p); }
