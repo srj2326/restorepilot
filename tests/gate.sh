@@ -27,6 +27,7 @@ FAST_TESTS=(
   test_custom_admin        # no working credential is ever handed back
   test_restore_progress    # progress stays inside its phase and moves
   test_abandon_stuck_restore
+  test_job_lost_update    # a progress tick never resurrects a cancelled job
 )
 
 if [[ "$1" == "--install" ]]; then

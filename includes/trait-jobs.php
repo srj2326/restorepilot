@@ -137,8 +137,29 @@ trait RestorePilot_Jobs {
     self::write_restore_status_file($job_id, $job);
   }
 
+  /**
+   * Merges changes into a backup job record.
+   *
+   * The re-read is uncached on purpose. This is a read-modify-write of a
+   * record other requests also write, and the read used to come from this
+   * process's option cache -- a snapshot taken when the chunk began. So a
+   * worker's ordinary progress tick merged its own changes over a copy that
+   * predated the operator's cancel and wrote 'running' back over it. The
+   * cancel was not noticed late; it was erased, by the very worker it was
+   * meant to stop, within the five seconds until the next tick. Making
+   * throw_if_backup_cancelled() read past the cache is correct and does
+   * nothing on its own, because it then reads a database this has already
+   * put back.
+   *
+   * The same stale write also dropped whatever another worker had set in the
+   * meantime -- 'checkpoint' among them, which is what records how far the
+   * job has actually got.
+   *
+   * A window remains between this read and the write below, but it is the
+   * width of an array_merge() rather than of an entire chunk.
+   */
   private static function update_backup_job(string $job_id, array $updates): void {
-    $job = self::get_backup_job($job_id);
+    $job = self::get_backup_job($job_id, true);
     if (!$job) {
       return;
     }
@@ -147,8 +168,16 @@ trait RestorePilot_Jobs {
     self::set_backup_job($job_id, $job);
   }
 
+  /**
+   * Merges changes into a restore job record. Uncached for the same reason as
+   * update_backup_job() above, and it matters more here: set_restore_job()
+   * also writes the status file that polling falls back to, so a stale merge
+   * announced "still running" in both places at once for a restore an
+   * administrator had already ended -- while the locks it had released let a
+   * second restore start beside the first.
+   */
   private static function update_restore_job(string $job_id, array $updates): void {
-    $job = self::get_restore_job($job_id);
+    $job = self::get_restore_job($job_id, true);
     if (!$job) {
       if ($job_id === '' || $job_id !== self::$active_restore_job_id) {
         return;
