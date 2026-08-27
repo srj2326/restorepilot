@@ -899,6 +899,37 @@ trait RestorePilot_AdminUi {
               <span><?php echo esc_html__('I have a full backup, or I understand this site cannot be recovered.', 'restorepilot-backup-migration'); ?></span>
             </label>
             <?php
+            // Named individually rather than counted. Some of these are put
+            // there by the host (auto-updates, preview domains) or by a
+            // management service, and removing those can break things the
+            // person doing the reset cannot put back. Showing the actual
+            // filenames is what lets them tell the difference.
+            $rp_mu_plugins = self::mu_plugin_entries();
+            ?>
+            <?php if ($rp_mu_plugins): ?>
+              <label class="rp-modal__ack">
+                <input type="checkbox" id="rp-master-reset-purge-mu">
+                <span>
+                  <?php
+                  printf(
+                    /* translators: %d: number of must-use plugin files found */
+                    esc_html(_n(
+                      'Also delete the %d must-use plugin found on this site',
+                      'Also delete the %d must-use plugins found on this site',
+                      count($rp_mu_plugins),
+                      'restorepilot-backup-migration'
+                    )),
+                    count($rp_mu_plugins)
+                  );
+                  ?>
+                  <span class="rp-toggle__desc">
+                    <code><?php echo esc_html(implode(', ', $rp_mu_plugins)); ?></code><br>
+                    <?php echo esc_html__('Must-use plugins load on every request and are not shown with ordinary plugins. Some are installed by your host or by a site-management service, and deleting those can break things you cannot reinstall yourself. Leave this unticked unless you recognise all of them as yours.', 'restorepilot-backup-migration'); ?>
+                  </span>
+                </span>
+              </label>
+            <?php endif; ?>
+            <?php
             // Off by default, and deliberately so. These backups are the only
             // way back from this screen, and the cost of the two mistakes is
             // not symmetric: keeping backups nobody wanted wastes disk space,

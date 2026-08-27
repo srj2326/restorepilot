@@ -41,6 +41,78 @@ trait RestorePilot_Storage {
    * Returns false if the operation was refused, or if anything inside $dir
    * could not be removed.
    */
+  /**
+   * The must-use plugins present on this site, as display names.
+   *
+   * Master Reset never touched these, so a site it called "a clean WordPress
+   * installation" still had every one of them loading on every request. They
+   * are not left out by accident though, and they are not all the site
+   * owner's: hosts drop their own in here (auto-updates, preview domains) and
+   * management services install loaders. Removing those can break the
+   * hosting integration in ways the person doing the reset cannot put back.
+   *
+   * So they are listed rather than assumed. The confirmation shows what is
+   * actually there and the operator decides, instead of the plugin guessing
+   * which ones are infrastructure.
+   */
+  private static function mu_plugin_entries(): array {
+    $dir = defined('WPMU_PLUGIN_DIR') ? (string) WPMU_PLUGIN_DIR : self::content_dir() . '/mu-plugins';
+    if (!is_dir($dir)) {
+      return [];
+    }
+
+    $entries = [];
+    foreach (new DirectoryIterator($dir) as $item) {
+      if ($item->isDot()) {
+        continue;
+      }
+      $name = $item->getFilename();
+      // index.php is WordPress's own directory guard, not somebody's plugin.
+      if ($name === 'index.php' || $name === '.DS_Store') {
+        continue;
+      }
+      $entries[] = $name;
+    }
+
+    sort($entries);
+    return $entries;
+  }
+
+  /**
+   * Removes the must-use plugins, when the operator has asked for it.
+   *
+   * Returns how many entries went, so the result can say so rather than
+   * leaving the operator to check a directory they may not know exists.
+   */
+  private static function master_reset_wipe_mu_plugins(): int {
+    $dir = defined('WPMU_PLUGIN_DIR') ? (string) WPMU_PLUGIN_DIR : self::content_dir() . '/mu-plugins';
+    $real = realpath($dir);
+    if ($real === false || !is_dir($real)) {
+      return 0;
+    }
+
+    $removed = 0;
+    foreach (new DirectoryIterator($real) as $item) {
+      if ($item->isDot()) {
+        continue;
+      }
+      $name = $item->getFilename();
+      if ($name === 'index.php') {
+        continue;
+      }
+      $path = $item->getPathname();
+      if ($item->isDir()) {
+        if (self::delete_directory($path, $real)) {
+          $removed++;
+        }
+      } elseif (@unlink($path) || !file_exists($path)) {
+        $removed++;
+      }
+    }
+
+    return $removed;
+  }
+
   private static function master_reset_wipe_dir(string $dir, string $allowed_parent, bool $include_own_storage = false): bool {
     $real_dir    = realpath($dir);
     $real_parent = realpath($allowed_parent);

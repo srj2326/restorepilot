@@ -823,6 +823,8 @@ trait RestorePilot_RequestHandlers {
     // Explicitly asked for, and off unless it was: these backups are the only
     // route back from this action.
     $purge_backups = self::post_bool('purge_backups');
+    $purge_mu = self::post_bool('purge_mu_plugins');
+    $removed_mu = 0;
 
     // 1a. Drop tables other plugins created.
     //
@@ -943,6 +945,10 @@ trait RestorePilot_RequestHandlers {
     // 4. Wipe all uploads (keep the uploads root directory itself)
     $upload = wp_upload_dir(null, false);
     if (empty($upload['error']) && !empty($upload['basedir'])) {
+      if ($purge_mu) {
+        $removed_mu = self::master_reset_wipe_mu_plugins();
+      }
+
       if (!self::master_reset_wipe_dir($upload['basedir'], self::content_dir(), $purge_backups)) {
         $reset_problems[] = 'one or more files in the uploads directory could not be removed';
       }
@@ -1033,7 +1039,8 @@ trait RestorePilot_RequestHandlers {
     }
 
     self::write_log('Master Reset complete. Site reset to clean WordPress state. Dropped ' . $dropped_foreign
-      . ' table(s) belonging to other plugins. Stored backups were ' . ($purge_backups ? 'deleted at the operator\'s request.' : 'kept.'));
+      . ' table(s) belonging to other plugins. Stored backups were ' . ($purge_backups ? 'deleted at the operator\'s request.' : 'kept.')
+      . ' Must-use plugins: ' . ($purge_mu ? ($removed_mu . ' removed at the operator\'s request.') : 'kept.'));
 
     wp_send_json_success([
       'message'  => $dropped_foreign > 0
