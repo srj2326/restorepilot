@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.4
+Stable tag: 0.5.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,12 @@ Yes. Use `wp restorepilot backup` for a full backup, `wp restorepilot backup --d
 RestorePilot stops immediately, removes maintenance mode, and writes the full error to the Logs tab. A pre-restore rollback point may be available, but you should review the logs and verify the site before retrying.
 
 == Changelog ==
+
+= 0.5.5 =
+* Fixed: a restore could stop partway with a "Duplicate entry" database error, and sometimes then report that a table was missing. When a restore continues in the background it may be picked up by two workers at once -- one sent directly, one from the scheduled fallback -- and both would write the same rows to the same temporary table. A row that has already been written is now recognised as such and the restore carries on, rather than treating it as a failure. Every other database error still stops the restore, and the log records when a table was written twice. This affects 0.5.3 and 0.5.4; whether it happened depended on timing, and it became more likely the larger the site. Note that this protection needs a table to have a primary or unique key to identify its rows by -- a small number of plugin tables have neither, and a restore of those can still stop this way.
+* Added: the password for a new administrator account can now be shown while you type it. That password is needed immediately after the restore, to sign in to a site whose address may have just changed, with no other administrator to fall back on -- so a typo you cannot see locks you out.
+* Fixed: after restoring a backup uploaded from your computer, the "Server backup path" box under Advanced settings was left holding an internal temporary filename, pointing at a file the restore had already deleted. Starting another restore without choosing a new file then failed. That box is now only ever what you type in it.
+* Changed: Master Reset has moved out of the Status tab into a Danger Zone tab of its own. Everything in front of it is unchanged: the warning, the confirmation dialog, the acknowledgement, and typing RESET in full. Removing your stored backups and your must-use plugins both remain off unless you tick them.
 
 = 0.5.4 =
 * Fixed: cancelling a backup did not stop it. Cancel marked the backup cancelled, but the process doing the work never saw that. It was reading a copy of the job made when its turn started, and its own progress updates -- which happen every few seconds -- then wrote "still running" back over the cancellation. The backup carried on to the end. Cancelling now takes effect within about a second.
