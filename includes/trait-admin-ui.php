@@ -20,7 +20,7 @@ trait RestorePilot_AdminUi {
     $notice = self::query_value('rp_notice');
     $error = self::query_value('rp_error');
     $tab = sanitize_key(self::query_value('tab', 'backup'));
-    if (!in_array($tab, ['backup', 'daily', 'restore', 'logs', 'settings'], true)) {
+    if (!in_array($tab, ['backup', 'daily', 'restore', 'logs', 'settings', 'danger'], true)) {
       $tab = 'backup';
     }
     self::enforce_backup_retention();
@@ -95,6 +95,21 @@ trait RestorePilot_AdminUi {
            data-rp-tab="settings">
           <span class="dashicons dashicons-admin-settings" aria-hidden="true"></span>
           <?php echo esc_html__('Status', 'restorepilot-backup-migration'); ?>
+        </a>
+        <?php
+        // Last, and deliberately not styled like the others. Master Reset used
+        // to live inside Status, where people who wanted it had to hunt and
+        // people who did not could still meet it unannounced. Giving it its own
+        // tab fixes both, but a destructive action should not sit in the main
+        // navigation looking like Backup and Restore -- hence the name and the
+        // colour. Every gate behind it is unchanged: the warning card, the
+        // modal, the acknowledgement, and typing RESET in full.
+        ?>
+        <a class="nav-tab rp-nav-tab--danger <?php echo esc_attr($tab === 'danger' ? 'nav-tab-active' : ''); ?>"
+           href="<?php echo esc_url(add_query_arg('tab', 'danger', self::admin_url())); ?>"
+           data-rp-tab="danger">
+          <span class="dashicons dashicons-warning" aria-hidden="true"></span>
+          <?php echo esc_html__('Danger Zone', 'restorepilot-backup-migration'); ?>
         </a>
       </nav>
 
@@ -549,6 +564,16 @@ trait RestorePilot_AdminUi {
                       <div class="rp-advanced-panel__section">
                         <label class="rp-field__label" for="rp_server_backup_path"><?php echo esc_html__('Server backup path', 'restorepilot-backup-migration'); ?></label>
                         <input id="rp_server_backup_path" class="regular-text" type="text" name="server_backup_path" placeholder="wp-content/uploads/backup.zip">
+                        <?php
+                        // The chunked upload's temporary file gets its own hidden
+                        // field rather than borrowing the box above. It used to
+                        // write into it, which left an internal temp filename
+                        // sitting in a setting the operator never typed -- and
+                        // pointing at a file the restore deletes on the way out,
+                        // so pressing Restore again tried to read something that
+                        // no longer existed.
+                        ?>
+                        <input type="hidden" name="uploaded_backup_path" id="rp-restore-uploaded-path" value="">
                         <span class="description"><?php echo esc_html__('Only needed if the full backup zip is already sitting inside this site\'s uploads directory (for example, placed there via your host\'s file manager) — this skips uploading it again.', 'restorepilot-backup-migration'); ?></span>
                       </div>
 
@@ -676,8 +701,24 @@ trait RestorePilot_AdminUi {
 
                   <p class="rp-field">
                     <label for="rp-new-admin-password-input"><?php echo esc_html__('Password', 'restorepilot-backup-migration'); ?></label>
-                    <input type="password" id="rp-new-admin-password-input" autocomplete="new-password" spellcheck="false" required
-                      placeholder="<?php echo esc_attr__('At least 8 characters', 'restorepilot-backup-migration'); ?>">
+                    <?php
+                    // Shown on request. This password is invented here and needed
+                    // immediately afterwards, to sign in to a site whose address
+                    // may have just changed, with no other administrator account
+                    // to fall back on -- so a typo nobody can see is a lockout,
+                    // not an inconvenience. Core puts the same control on its own
+                    // password fields for the same reason.
+                    ?>
+                    <span class="rp-password-wrap">
+                      <input type="password" id="rp-new-admin-password-input" autocomplete="new-password" spellcheck="false" required
+                        placeholder="<?php echo esc_attr__('At least 8 characters', 'restorepilot-backup-migration'); ?>">
+                      <button type="button" class="button rp-password-toggle" id="rp-new-admin-password-toggle"
+                        aria-pressed="false" aria-controls="rp-new-admin-password-input"
+                        aria-label="<?php echo esc_attr__('Show password', 'restorepilot-backup-migration'); ?>"
+                        title="<?php echo esc_attr__('Show password', 'restorepilot-backup-migration'); ?>">
+                        <span class="dashicons dashicons-visibility" aria-hidden="true"></span>
+                      </button>
+                    </span>
                     <span class="rp-field__hint"><?php echo esc_html__('Never stored on the server during the restore — it is applied from this page once the restore finishes.', 'restorepilot-backup-migration'); ?></span>
                   </p>
 
@@ -837,6 +878,14 @@ trait RestorePilot_AdminUi {
             </div>
           </div>
 
+
+        </div>
+      </div>
+
+
+      </section>
+      <section id="rp-panel-danger" class="rp-tab-panel <?php echo esc_attr($tab === 'danger' ? 'is-active' : ''); ?>">
+        <div class="rp-stack">
           <!-- Master Reset danger zone -->
           <div class="rp-card rp-card--danger rp-danger-zone">
             <div class="rp-card__head rp-card__head--danger">
@@ -869,10 +918,7 @@ trait RestorePilot_AdminUi {
               </div>
             </div>
           </div>
-
         </div>
-      </div>
-
       <!-- Master Reset confirmation modal -->
       <div id="rp-master-reset-modal" class="rp-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="rp-master-reset-title">
         <div class="rp-modal rp-modal--danger">
@@ -961,7 +1007,6 @@ trait RestorePilot_AdminUi {
           </div>
         </div>
       </div>
-
       </section>
       <section id="rp-panel-logs" class="rp-tab-panel <?php echo esc_attr($tab === 'logs' ? 'is-active' : ''); ?>">
         <?php self::render_logs_tab(); ?>

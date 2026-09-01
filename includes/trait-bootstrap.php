@@ -125,6 +125,8 @@ trait RestorePilot_Bootstrap {
       // completion dialog is waiting.
       'loginUrl' => esc_url(wp_login_url(add_query_arg('tab', 'restore', self::admin_url()))),
       'i18n'         => [
+        'showPassword'   => __('Show password', 'restorepilot-backup-migration'),
+        'hidePassword'   => __('Hide password', 'restorepilot-backup-migration'),
         'noLogEntriesYet'          => __('No log entries yet.', 'restorepilot-backup-migration'),
         'noMatchingLogEntries'     => __('No matching log entries.', 'restorepilot-backup-migration'),
         'confirmClearLogs'         => __('Clear RestorePilot logs?', 'restorepilot-backup-migration'),

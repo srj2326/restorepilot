@@ -1922,7 +1922,15 @@ trait RestorePilot_Restore {
   }
 
   private static function prepare_restore_upload(): string {
-    $server_path = self::post_value('server_backup_path');
+    // The chunked upload reports where it put the file in its own field, so a
+    // path the operator typed and a path the browser just uploaded stay
+    // separate. Both are validated identically below -- being written by our
+    // own JavaScript earns the uploaded one no trust it has not been checked
+    // for, since anything reaching here arrived in a request.
+    $server_path = trim(self::post_value('uploaded_backup_path'));
+    if ($server_path === '') {
+      $server_path = self::post_value('server_backup_path');
+    }
     $server_path = trim($server_path);
     if ($server_path !== '') {
       $server_path = self::normalize_server_path($server_path);

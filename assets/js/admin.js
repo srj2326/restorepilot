@@ -5,7 +5,8 @@
     daily: document.getElementById('rp-panel-daily'),
     restore: document.getElementById('rp-panel-restore'),
     logs: document.getElementById('rp-panel-logs'),
-    settings: document.getElementById('rp-panel-settings')
+    settings: document.getElementById('rp-panel-settings'),
+    danger: document.getElementById('rp-panel-danger')
   };
   document.querySelectorAll('.rp-disclosure').forEach(function (disclosure, index) {
     var trigger = disclosure.querySelector('.rp-disclosure__summary');
@@ -545,6 +546,11 @@
     }
     if (restoreFileInput) {
       restoreFileInput.addEventListener('change', function () {
+        // A newly chosen file makes the previous upload's temp path stale, and
+        // that path takes precedence on the server -- so leaving it set would
+        // quietly restore the file before this one.
+        var stalePath = document.getElementById('rp-restore-uploaded-path');
+        if (stalePath) { stalePath.value = ''; }
         syncRestoreReadiness(false);
       });
     }
@@ -886,12 +892,54 @@
     var newAdminPasswordInput = document.getElementById('rp-new-admin-password-input');
     var newAdminEmailHidden = document.getElementById('rp_new_admin_email_hidden');
     var newAdminError = document.getElementById('rp-new-admin-error');
+    var newAdminPasswordToggle = document.getElementById('rp-new-admin-password-toggle');
+
+    // Reveal the password on request. The field is filled in once and needed
+    // immediately afterwards to sign in, so an unseen typo locks the operator
+    // out of the site they have just restored.
+    if (newAdminPasswordToggle && newAdminPasswordInput) {
+      newAdminPasswordToggle.addEventListener('click', function () {
+        var revealed = newAdminPasswordInput.getAttribute('type') === 'text';
+        newAdminPasswordInput.setAttribute('type', revealed ? 'password' : 'text');
+        newAdminPasswordToggle.setAttribute('aria-pressed', revealed ? 'false' : 'true');
+        var label = revealed
+          ? (restorePilotData.i18n.showPassword || 'Show password')
+          : (restorePilotData.i18n.hidePassword || 'Hide password');
+        newAdminPasswordToggle.setAttribute('aria-label', label);
+        newAdminPasswordToggle.setAttribute('title', label);
+        var icon = newAdminPasswordToggle.querySelector('.dashicons');
+        if (icon) {
+          icon.classList.toggle('dashicons-visibility', revealed);
+          icon.classList.toggle('dashicons-hidden', !revealed);
+        }
+        // Keep focus where the typing is, not on the button that was clicked.
+        newAdminPasswordInput.focus();
+      });
+    }
 
     // The chosen password is held here and nowhere else until the restore
     // finishes, then sent in a single call. It deliberately never goes into
     // the restore form: the job record it would ride in is mirrored to a file
     // on disk so it can survive the database swap.
     var pendingAdminPassword = '';
+
+    // Whenever the field is cleared, put it back to masked. Otherwise a
+    // revealed password stays on screen after the dialog closes, and the next
+    // time it opens it is already showing.
+    function maskNewAdminPassword() {
+      if (!newAdminPasswordInput) { return; }
+      newAdminPasswordInput.setAttribute('type', 'password');
+      if (!newAdminPasswordToggle) { return; }
+      newAdminPasswordToggle.setAttribute('aria-pressed', 'false');
+      var label = restorePilotData.i18n.showPassword || 'Show password';
+      newAdminPasswordToggle.setAttribute('aria-label', label);
+      newAdminPasswordToggle.setAttribute('title', label);
+      var icon = newAdminPasswordToggle.querySelector('.dashicons');
+      if (icon) {
+        icon.classList.add('dashicons-visibility');
+        icon.classList.remove('dashicons-hidden');
+      }
+    }
 
     function toggleNewAdminFields() {
       if (!newAdminFields || !restoreConfirmNewAdmin) { return; }
@@ -943,6 +991,7 @@
       }
       if (newAdminEmailInput) { newAdminEmailInput.value = ''; }
       if (newAdminPasswordInput) { newAdminPasswordInput.value = ''; }
+      maskNewAdminPassword();
       if (newAdminEmailHidden) { newAdminEmailHidden.value = ''; }
       showNewAdminError('');
       toggleNewAdminFields();
@@ -981,8 +1030,10 @@
         }
         if (newAdminPasswordInput) {
           // Nothing further reads the field itself, so do not leave a
-          // password sitting in the DOM for the rest of the restore.
+          // password sitting in the DOM for the rest of the restore --
+          // masked again as well, so a revealed one is not left on screen.
           newAdminPasswordInput.value = '';
+          maskNewAdminPassword();
         }
 
         restoreForm.setAttribute('data-rp-confirmed', '1');
@@ -1017,6 +1068,7 @@
 
       var fileInput = restoreForm.querySelector('input[name="backup_upload[]"]');
       var serverPath = restoreForm.querySelector('input[name="server_backup_path"]');
+      var uploadedPath = document.getElementById('rp-restore-uploaded-path');
       var restoreButtons = restoreForm.querySelectorAll('button[type="submit"]');
       var restoreProgress = document.getElementById('rp-restore-progress');
       var restoreProgressBar = document.getElementById('rp-restore-progress-bar');
@@ -1104,8 +1156,11 @@
               setRestoreProgressLabel(restorePilotData.i18n.restoreInProgress);
             }
             setRestoreProgress(100, isRestoreCheck ? restorePilotData.i18n.uploadCompleteChecking : restorePilotData.i18n.uploadCompleteRestoring);
-            if (serverPath) {
-              serverPath.value = json.data.path;
+            if (uploadedPath) {
+              // Deliberately not the visible "Server backup path" box: that one
+              // is for a path the operator typed, and filling it with our temp
+              // filename left a stale path behind once the restore deleted it.
+              uploadedPath.value = json.data.path;
             }
             if (fileInput) {
               fileInput.disabled = true;
@@ -1166,6 +1221,10 @@
   function openModal(name, path) {
     if (nameEl)    nameEl.textContent = name;
     if (pathInput) pathInput.value    = path;
+    // Same reason: an earlier upload in this page's lifetime would otherwise
+    // outrank the backup just picked from the list.
+    var uploadedStale = document.getElementById('rp-restore-uploaded-path');
+    if (uploadedStale) { uploadedStale.value = ''; }
     if (ackBox)    { ackBox.checked = false; }
     syncSubmit();
     modal.style.display = 'flex';
