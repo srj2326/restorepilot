@@ -442,7 +442,12 @@ trait RestorePilot_Backup {
        * (the write fails with EFBIG); the backup is split into more, smaller
        * volumes instead.
        *
-       * @param int $bytes Default volume size.
+       * Values below 1 MB are raised to 1 MB by the volume writer, which is
+       * the smallest split it will make -- a filter asking for less gets 1 MB
+       * without being told, which cost a test of ours a scenario it thought it
+       * had built.
+       *
+       * @param int $bytes Default volume size. Anything under 1 MB becomes 1 MB.
        */
       $volume_bytes = (int) apply_filters('restorepilot_backup_volume_bytes', self::BACKUP_VOLUME_BYTES);
       $existing_volumes = self::discover_volumes($zip_path)['paths'];

@@ -48,15 +48,26 @@ foreach ($targets as $part => $rel_dir) {
   if (is_dir($dir)) system('rm -rf ' . escapeshellarg($dir));
   mkdir($dir, 0777, true);
   $expected_hashes[$part] = [];
+  // Each category must be comfortably larger than one volume, or it can only
+  // span a boundary by luck of where it happens to land. It asked for 200 KB
+  // volumes and silently got 1 MB -- RestorePilot_Backup_Volume_Writer floors
+  // the split at max(1048576, ...) -- so 541 KB of fixture fitted inside a
+  // single volume and only straddled a boundary when the rest of the archive
+  // pushed it across one. It stopped doing that the moment a WooCommerce
+  // database went in front of it, and Test B correctly refused to pass on a
+  // scenario it had not managed to create. ~3 MB per category cannot fit in a
+  // 1 MB volume however the boundaries fall.
   for ($i = 0; $i < 40; $i++) {
     $name = "f$i.bin";
-    $bytes = random_bytes(8000 + $i * 300);
+    $bytes = random_bytes(60000 + $i * 1000);
     file_put_contents("$dir/$name", $bytes);
     $expected_hashes[$part]["files/wp-content/$rel_dir/$name"] = sha1($bytes);
   }
 }
 echo 'Fixture: ' . array_sum(array_map('count', $expected_hashes)) . " tagged files across plugins/uploads.\n";
 
+// Below the writer's own 1 MB floor, so this is really a request for the
+// smallest volumes the plugin will make.
 add_filter('restorepilot_backup_volume_bytes', function () { return 200 * 1024; });
 
 $backup_result = call_private('create_backup_package', [true, '', [], false, false, ['triggered_by' => 'multivolume-download-test']]);
