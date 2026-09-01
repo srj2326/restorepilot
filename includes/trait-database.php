@@ -551,6 +551,70 @@ trait RestorePilot_Database {
     }
   }
 
+  /**
+   * Is this row already in the scratch table it was about to be written to?
+   *
+   * Asked only when an insert has just failed, so the cost falls on the rare
+   * path. Answered by looking at the table rather than by reading the error:
+   * the obvious test is $wpdb->last_error for "Duplicate entry", which is an
+   * English sentence a MySQL server is free to translate, and a restore that
+   * only survives on servers set to English is not a fix.
+   *
+   * A row is the same row when its key matches, not when every column does.
+   * The payload can legitimately differ between attempts -- URL replacement is
+   * applied to the values on the way in, and a retry after a changed target URL
+   * would write different text under the same key. The key is what says this is
+   * the same source row arriving a second time.
+   *
+   * Returns false whenever it cannot be sure: no key to identify the row by, a
+   * payload missing that key, or a table that is no longer there. In each case
+   * the insert's own error is the truthful answer and must be allowed to stand.
+   */
+  private static function restore_row_already_present(array $plan, array $row): bool {
+    $create = (string) ($plan['create'] ?? '');
+    $table  = (string) ($plan['tmp_table'] ?? '');
+    if ($create === '' || $table === '') {
+      return false;
+    }
+
+    $key_columns = self::primary_key_columns($create);
+    if (!$key_columns) {
+      $key_columns = self::unique_key_columns($create);
+    }
+    if (!$key_columns) {
+      // Nothing identifies this row, so a repeat cannot be told from a new
+      // row that failed for some other reason.
+      return false;
+    }
+
+    $where = [];
+    $values = [];
+    foreach ($key_columns as $column) {
+      if (!array_key_exists($column, $row) || $row[$column] === null) {
+        return false;
+      }
+      $where[] = '`' . str_replace('`', '``', $column) . '` = %s';
+      $values[] = (string) $row[$column];
+    }
+
+    $wpdb = self::wpdb();
+    $wpdb->last_error = '';
+    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table name is a scratch name this restore generated; every value is bound.
+    $found = $wpdb->get_var($wpdb->prepare(
+      'SELECT COUNT(*) FROM `' . str_replace('`', '``', $table) . '` WHERE ' . implode(' AND ', $where),
+      $values
+    ));
+
+    // A dropped table answers with an error, not a count -- which is the other
+    // half of the failure this exists for, and emphatically not a reason to
+    // treat the row as safely written.
+    if (!empty($wpdb->last_error)) {
+      return false;
+    }
+
+    return (int) $found > 0;
+  }
+
   private static function throw_on_db_error(string $context): void {
     $wpdb = self::wpdb();
     if (!empty($wpdb->last_error)) {

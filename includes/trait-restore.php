@@ -640,6 +640,30 @@ trait RestorePilot_Restore {
    * leftover, and row order is deterministic since the same export is read
    * in the same order every time.
    */
+  /**
+   * Records that a table was written twice, once per table rather than once
+   * per row -- a repeated chunk can repeat thousands of rows, and a log nobody
+   * can read is not a diagnostic.
+   *
+   * Worth saying out loud rather than passing over in silence. It is not an
+   * error and the restore is correct, but it means two workers reached the
+   * same table, which is the thing to look at first if that restore later
+   * turns out to have been slow or to have behaved oddly.
+   */
+  private static function note_restored_row_repeat(string $table): void {
+    static $seen = [];
+    if (isset($seen[$table])) {
+      $seen[$table]++;
+      return;
+    }
+    $seen[$table] = 1;
+    self::write_log(
+      'Restore found rows already present in ' . $table . ' and carried on. '
+      . 'Part of this table was written twice, which happens when a second worker '
+      . 'reaches it; the rows are correct either way.'
+    );
+  }
+
   private static function restore_database(RestorePilot_Backup_Archive $zip, array $manifest, array $plan_set, string $source_url, string $target_url, string $job_id, array $checkpoint_base, array $completed_tables): void {
     $wpdb = self::wpdb();
     $plans = $plan_set['plans'];
@@ -860,8 +884,33 @@ trait RestorePilot_Restore {
         $wpdb->last_error = '';
         $inserted = $wpdb->insert($active_plan['tmp_table'], $clean);
         if ($inserted === false) {
-          self::throw_on_db_error('insert restored row');
+          // A row that is already here is the outcome this insert wanted, so
+          // it is not a failure. The restore resumes by counting the rows it
+          // has written, which only ever held while no row was written twice
+          // -- and rows are written twice routinely: dispatch_restore_worker()
+          // fires a loopback that may or may not be delivered AND schedules a
+          // cron fallback five seconds into a twenty-second chunk, so a second
+          // worker reaches every chunk boundary of every restore. When it
+          // landed, the two met on the same scratch table and the restore died
+          // with a duplicate key -- then died again with a missing table,
+          // because the first worker's handler had dropped the scratch tables
+          // the second was still writing into.
+          //
+          // A resumable process cannot promise never to repeat itself, so
+          // repeating is made harmless instead. The error is captured first:
+          // asking the table below runs a query of its own, which would
+          // otherwise replace the message we still need if this turns out to
+          // be a real failure.
+          $insert_error = (string) $wpdb->last_error;
+          if (!self::restore_row_already_present($active_plan, $clean)) {
+            $wpdb->last_error = $insert_error;
+            self::throw_on_db_error('insert restored row');
+          }
+          self::note_restored_row_repeat($active_old_table);
         }
+        // True for a row that was already present as well as one just written:
+        // the chunk has moved past it either way, and a chunk that made no
+        // progress is not allowed to yield.
         self::$restore_chunk_progress_made = true;
         // Touch the job record on every row so the stale detector does not
         // fire during a very large single-table import that takes > 2 h.
