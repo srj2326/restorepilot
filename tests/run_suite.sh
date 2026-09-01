@@ -43,7 +43,7 @@ fi
 # test that has it -- and so no other test pays for loading them.
 test_preconditions() {
   case "$1" in
-    test_woocommerce_restore) echo "woocommerce/woocommerce.php" ;;
+    test_woocommerce_restore|test_restore_duplicate_recovery) echo "woocommerce/woocommerce.php" ;;
     *) echo "" ;;
   esac
 }
@@ -59,7 +59,10 @@ for t in "$@"; do
   # loaded. The store several tests destroy is rebuilt here rather than being
   # assumed to have survived whatever ran before.
   case "$t" in
-    test_woocommerce_restore)
+    # Both need a database large enough to take several chunks: one restores a
+    # real store, the other has to catch a scratch table mid-restore and cannot
+    # if the whole thing finishes inside a single chunk.
+    test_woocommerce_restore|test_restore_duplicate_recovery)
       store_out=$(php_run "$S/ensure_woo_store.php" 2>&1)
       [ -n "$store_out" ] && echo "$store_out" >> "$OUT"
       ;;
