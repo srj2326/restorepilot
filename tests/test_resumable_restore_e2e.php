@@ -93,7 +93,12 @@ add_filter('pre_http_request', function () {
 // upsized correspondingly since each is an in-process call (cheap) rather
 // than a subprocess (unlike test_resumable_restore_files.php's per-chunk
 // process spawn), so a higher cap here costs little beyond wall-clock.
-add_filter('restorepilot_restore_chunk_seconds', function () { return 10.0; });
+// 10.0 was chosen to clear a test site carrying 819,746 rows of Contact Form 7
+// data restored from an old backup. That debris is gone -- the site is 14 MB
+// now, and the whole restore finished inside a single 10-second chunk, so this
+// test could no longer see a resumption at all and said so. Sized for the
+// fixture above instead of for whatever the site has accumulated.
+add_filter('restorepilot_restore_chunk_seconds', function () { return 0.3; });
 
 call_private('ensure_storage');
 $restore_zip_path = call_private('storage_dir') . '/restore-upload-' . wp_generate_uuid4() . '.zip';
