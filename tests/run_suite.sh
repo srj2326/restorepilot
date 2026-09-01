@@ -55,6 +55,16 @@ for t in "$@"; do
   reset_out=$(php_run "$S/reset_site_state.php" ${pre} 2>&1)
   [ -n "$reset_out" ] && echo "$reset_out" >> "$OUT"
 
+  # Data preconditions, after the plugin ones because they need the plugin
+  # loaded. The store several tests destroy is rebuilt here rather than being
+  # assumed to have survived whatever ran before.
+  case "$t" in
+    test_woocommerce_restore)
+      store_out=$(php_run "$S/ensure_woo_store.php" 2>&1)
+      [ -n "$store_out" ] && echo "$store_out" >> "$OUT"
+      ;;
+  esac
+
   s=$(date +%s)
   r=$(php_run "$S/$t.php" 2>&1)
   code=$?

@@ -28,6 +28,7 @@ FAST_TESTS=(
   test_restore_progress    # progress stays inside its phase and moves
   test_abandon_stuck_restore
   test_job_lost_update    # a progress tick never resurrects a cancelled job
+  test_restore_source_precedence  # the right file is restored, and Master Reset's modal is reachable
 )
 
 if [[ "$1" == "--install" ]]; then

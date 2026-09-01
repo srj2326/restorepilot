@@ -100,7 +100,21 @@ $before_orders = order_fingerprints();
 printf("Before: %d orders, %d order items, %d products, %d users\n",
     $before_counts['wc_orders'], $before_counts['woocommerce_order_items'],
     $before_counts['products'], $before_counts['customers']);
-check('There is a real store to test against', $before_counts['wc_orders'] > 0 && $before_counts['woocommerce_order_items'] > 0);
+// Products matter as much as orders here, and are the part that goes missing:
+// a restore of a backup predating the store replaces wp_posts while leaving the
+// order tables standing, so the site keeps 399 orders for 0 products. Counting
+// only orders called that a real store and failed four checks later on a
+// serialized-meta assertion instead.
+$store_ok = $before_counts['wc_orders'] > 0
+    && $before_counts['woocommerce_order_items'] > 0
+    && $before_counts['products'] > 0;
+check('There is a real store to test against', $store_ok,
+    sprintf('%d orders, %d items, %d products', $before_counts['wc_orders'],
+        $before_counts['woocommerce_order_items'], $before_counts['products']));
+if (!$store_ok) {
+    echo "\nSKIP  the store is not intact, so nothing below would mean anything\n";
+    exit(1);
+}
 
 // A serialized value with a URL nested inside it, to prove replacement walks
 // serialized structures without corrupting their length prefixes.
