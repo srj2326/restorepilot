@@ -188,8 +188,73 @@ trait RestorePilot_Database {
    * through the same callback, so every caller has one code path regardless
    * of which format the archive uses.
    */
+  /**
+   * One newline-delimited record, assembled in bounded reads.
+   *
+   * fgets() with no length reads to the next newline however far away that is,
+   * so a line with no newline in it was read whole into memory. Handing it the
+   * 64 MB ceiling instead fixes that and introduces something worse: PHP
+   * allocates a buffer of the requested length on every call, which measured
+   * forty times slower on ordinary short lines and quietly cost a resumable
+   * restore a row it never got to.
+   *
+   * So reads are the size of a comfortable buffer and a long record is built
+   * from several of them, with its length checked as it grows. Returns null at
+   * end of input, which is what separates "no more records" from "an empty
+   * one".
+   */
+  private static function read_export_line($stream, string $part, int $line_number): ?string {
+    $buffer = '';
+
+    while (true) {
+      $chunk = fgets($stream, self::DATABASE_LINE_READ_BYTES);
+      if ($chunk === false) {
+        return $buffer === '' ? null : $buffer;
+      }
+
+      $buffer .= $chunk;
+
+      // A chunk ending in a newline is the end of this record.
+      if (substr($chunk, -1) === "\n") {
+        return $buffer;
+      }
+
+      if (strlen($buffer) > self::MAX_DATABASE_LINE_BYTES) {
+        throw new RuntimeException(sprintf(
+          /* translators: 1: name of the database export part, 2: line number, 3: the maximum size of one record */
+          __('Backup database export has a record at %1$s line %2$d longer than the %3$s RestorePilot allows.', 'restorepilot-backup-migration'),
+          $part,
+          $line_number,
+          size_format(self::MAX_DATABASE_LINE_BYTES)
+        ));
+      }
+
+      // The last record in a part legitimately has no trailing newline.
+      if (feof($stream)) {
+        return $buffer;
+      }
+    }
+  }
+
   private static function stream_database_records(RestorePilot_Backup_Archive $zip, array $manifest, callable $callback): void {
     $parts = self::database_part_names($manifest);
+
+    // Counted from what actually arrives, not from what the manifest claims.
+    // MAX_RESTORE_TABLE_COUNT was only ever checked against the archive's own
+    // `table_count`, so an archive declaring one table could carry any number
+    // and the restore plan grew in memory until PHP stopped. The manifest is
+    // part of the input being validated; it does not get to describe itself.
+    $tables_seen = 0;
+    $count_table = static function () use (&$tables_seen) {
+      $tables_seen++;
+      if ($tables_seen > self::MAX_RESTORE_TABLE_COUNT) {
+        throw new RuntimeException(sprintf(
+          /* translators: %d: the maximum number of tables RestorePilot will restore */
+          __('Backup database export contains more tables than the %d RestorePilot allows, whatever its manifest declares.', 'restorepilot-backup-migration'),
+          self::MAX_RESTORE_TABLE_COUNT
+        ));
+      }
+    };
 
     if (!$parts) {
       // Legacy format: the whole export is one JSON document. This is bounded
@@ -209,6 +274,7 @@ trait RestorePilot_Database {
         if (!is_array($table)) {
           throw new RuntimeException(__('Backup database export contains a malformed table record.', 'restorepilot-backup-migration'));
         }
+        $count_table();
         $callback('table', [
           'name' => $table['name'] ?? null,
           'create' => $table['create'] ?? null,
@@ -236,7 +302,7 @@ trait RestorePilot_Database {
 
       try {
         $line_number = 0;
-        while (($line = fgets($stream)) !== false) {
+        while (($line = self::read_export_line($stream, $part, $line_number + 1)) !== null) {
           $line_number++;
           $line = trim($line);
           if ($line === '') {
@@ -253,6 +319,7 @@ trait RestorePilot_Database {
           }
 
           if ($record['t'] === 'table') {
+            $count_table();
             $callback('table', [
               'name' => $record['name'] ?? null,
               'create' => $record['create'] ?? null,

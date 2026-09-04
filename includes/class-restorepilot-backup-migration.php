@@ -64,6 +64,27 @@ final class RestorePilot_Backup_Migration {
   // allows a backup of several terabytes.
   const MAX_BACKUP_VOLUMES = 4096;
   const MAX_RESTORE_TABLE_COUNT = 5000; // A real WordPress install has a few dozen tables at most.
+  // Longest single newline-delimited record a restore will read. fgets() with
+  // no length reads to the next newline however far away it is, so one line
+  // with no newline in it was read whole into memory before anything could
+  // object -- and a crafted archive is not needed to produce that shape, a
+  // truncated one does it too. Generous: export parts are 32 MB, so a single
+  // legitimate row is far below this even carrying a large blob.
+  const MAX_DATABASE_LINE_BYTES = 67108864; // 64 MB
+  // How much is asked for per read while assembling one record. PHP allocates
+  // a buffer of whatever length fgets() is given, on every call -- passing the
+  // 64 MB ceiling above made reading 200,000 short lines take 2164 ms instead
+  // of 52 ms, forty times slower, and cost a resumable restore enough of its
+  // chunk budget to leave a row unrestored. A record longer than this is
+  // assembled across several reads and measured as it grows.
+  const DATABASE_LINE_READ_BYTES = 1048576; // 1 MB
+  // Most a single archive entry may expand by. RestorePilot writes its
+  // archives stored rather than deflated -- a real backup measures 1.0:1, all
+  // 7438 entries of it -- so this sits 200x above anything the plugin
+  // produces, and well above the 20:1 or so that deflated text reaches. It is
+  // here to refuse an archive that unpacks to orders of magnitude more than it
+  // occupies, before a single entry is extracted.
+  const MAX_ARCHIVE_EXPANSION_RATIO = 200;
   const DIRECT_DOWNLOAD_MAX_AGE_SECONDS = 6 * HOUR_IN_SECONDS;
   const BACKUP_STALE_SECONDS = 7200; // 2 hours — used for restore, which can block on one huge table.
   // A backup worker touches its job at least every ~5 seconds in both the
