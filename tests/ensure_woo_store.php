@@ -36,6 +36,23 @@ if (!class_exists('WooCommerce')) {
     exit(0);
 }
 
+// Finish WooCommerce's own table work before anything takes a backup.
+//
+// The runner activates WooCommerce by writing active_plugins directly, so its
+// installer runs on the next load -- this one. That installer creates and
+// alters tables, and a backup opening a consistent-snapshot transaction while
+// that is still settling gets "Table definition has changed, please retry
+// transaction" and fails the export outright. Which is the plugin behaving
+// correctly: the snapshot really was invalidated. The race is ours, from
+// activating a plugin and immediately backing up, so it is settled here.
+if (class_exists('WC_Install')) {
+    if (method_exists('WC_Install', 'needs_db_update') && WC_Install::needs_db_update()) {
+        WC_Install::install();
+    }
+    // Let any deferred schema work land before the caller starts a snapshot.
+    if (function_exists('wp_cache_flush')) { wp_cache_flush(); }
+}
+
 global $wpdb;
 $products  = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = 'product'");
 $orders    = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}wc_orders");

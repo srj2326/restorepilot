@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.5
+Stable tag: 0.5.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,12 @@ Yes. Use `wp restorepilot backup` for a full backup, `wp restorepilot backup --d
 RestorePilot stops immediately, removes maintenance mode, and writes the full error to the Logs tab. A pre-restore rollback point may be available, but you should review the logs and verify the site before retrying.
 
 == Changelog ==
+
+= 0.5.6 =
+* Fixed: the manual installation instructions in the repository README left out the `includes/` directory, which the plugin loads eighteen files from. Anyone following them got a fatal error instead of a working plugin. Installing through WordPress was never affected.
+* Fixed: a restore now enforces its own limits by looking at the backup rather than by believing what the backup says about itself. The number of database tables was checked against a figure the archive declared, so an archive that understated it could grow the restore's working set until PHP ran out of memory. Tables are counted as they are read now, and an archive that unpacks to more than two hundred times the space it occupies is refused before anything is written to disk. A single database record longer than 64 MB is also refused rather than read whole. These protect against a damaged or crafted archive; a backup this plugin produced is unaffected, and reading the database export is now faster than before.
+* Fixed: when Master Reset is asked to remove must-use plugins, anything it cannot delete is now named in the result. It previously reported only how many it had removed, so a file left behind was invisible while the reset still described the site as clean. A must-use plugin loads on every request, so one left behind is still running.
+* Changed: development and test material is now excluded from the released package by an explicit list of what may be included, with the contents checked on every commit rather than at release time. No release has ever contained it; this makes that a property of the build instead of something remembered by hand.
 
 = 0.5.5 =
 * Fixed: a restore could stop partway with a "Duplicate entry" database error, and sometimes then report that a table was missing. When a restore continues in the background it may be picked up by two workers at once -- one sent directly, one from the scheduled fallback -- and both would write the same rows to the same temporary table. A row that has already been written is now recognised as such and the restore carries on, rather than treating it as a failure. Every other database error still stops the restore, and the log records when a table was written twice. This affects 0.5.3 and 0.5.4; whether it happened depended on timing, and it became more likely the larger the site. Note that this protection needs a table to have a primary or unique key to identify its rows by -- a small number of plugin tables have neither, and a restore of those can still stop this way.
