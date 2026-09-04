@@ -1359,6 +1359,11 @@ trait RestorePilot_Restore {
           'old_table_candidate' => self::old_table_name($target_prefix, $restore_id, count($plans)),
           'create' => $create,
           'row_count' => 0,
+          // Taken from this table's own CREATE statement, which travels inside
+          // the archive, so every row can be checked against the table it
+          // claims to belong to while this is still a plan and nothing on the
+          // live site has been touched.
+          'columns' => self::create_table_columns($create),
         ];
         $current_plan_index = count($plans) - 1;
         $plan_by_table[$old_table] = $current_plan_index;
@@ -1384,10 +1389,27 @@ trait RestorePilot_Restore {
       // straight from MySQL); this guards against a corrupted or crafted
       // archive smuggling a key restore_database() would otherwise pass
       // straight into $wpdb->insert().
+      $known_columns = $plans[$current_plan_index]['columns'];
       foreach (array_keys($payload) as $column) {
         if (!is_string($column) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
           /* translators: %s: database table name from the backup */
           throw new RuntimeException(sprintf(__('Backup table %s contains a row with an invalid column name.', 'restorepilot-backup-migration'), $table_name));
+        }
+        // And the column has to exist in the table the row says it belongs to.
+        // Checking only that the name looked like an identifier let a row
+        // naming a column the table does not have travel all the way through
+        // this side-effect-free plan and fail at the insert -- which happens
+        // after a rollback point has been written and maintenance mode turned
+        // on. The archive is then rejected halfway through changing the site
+        // rather than before touching it, which is the difference between an
+        // error message and an outage.
+        if ($known_columns !== [] && !isset($known_columns[$column])) {
+          throw new RuntimeException(sprintf(
+            /* translators: 1: database table name from the backup, 2: the column named by the row */
+            __('Backup table %1$s contains a row naming a column the table does not have: %2$s. This archive cannot be restored.', 'restorepilot-backup-migration'),
+            $table_name,
+            $column
+          ));
         }
       }
       $plans[$current_plan_index]['row_count']++;

@@ -52,6 +52,7 @@ FAST_TESTS=(
   test_restore_row_idempotence    # a repeated row is not a failure; every other db error still is
   test_storage_not_web_readable   # a backup cannot be fetched by asking the web server for it
   test_snapshot_and_sweep         # consistency is checked, and long prefixes do not orphan tables
+  test_restore_row_schema         # a bad row is refused while the restore is still only a plan
 )
 
 if [[ "$1" == "--install" ]]; then

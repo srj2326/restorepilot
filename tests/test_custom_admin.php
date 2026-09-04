@@ -49,7 +49,29 @@ check('A user_id is returned for the password step', !empty($r['user_id']));
 
 // ── THE POINT: sign-in is by email ──
 $signin = wp_authenticate_email_password(null, 'rp-owner@example.test', $r['password']);
-check('WordPress accepts the EMAIL as the sign-in identifier', $signin instanceof WP_User && (int) $signin->ID === (int) $r['user_id']);
+$signin_ok = $signin instanceof WP_User && (int) $signin->ID === (int) $r['user_id'];
+
+// This check has failed twice inside a full suite run and passed every time it
+// has been run on its own, including immediately afterwards in the state the
+// suite left behind -- so it is not leftover users and not the site's stored
+// state. Rather than record "flaky" a third time, the failure now carries
+// enough to identify itself: what came back, whether the account is really
+// there, and which address it ended up with. An intermittent failure nobody
+// can describe is one nobody will fix.
+$why = '';
+if (!$signin_ok) {
+    $found = get_user_by('email', 'rp-owner@example.test');
+    $why = sprintf(
+        'authenticate returned %s; created user_id=%s; user by that email is %s; its address is %s; %d users on the site',
+        is_wp_error($signin) ? ('WP_Error ' . $signin->get_error_code() . ' "' . $signin->get_error_message() . '"')
+                             : (is_object($signin) ? get_class($signin) . ' id=' . ($signin->ID ?? '?') : gettype($signin)),
+        var_export($r['user_id'] ?? null, true),
+        $found ? ('id ' . $found->ID) : 'missing',
+        $found ? $found->user_email : 'n/a',
+        count(get_users(['fields' => 'ID']))
+    );
+}
+check('WordPress accepts the EMAIL as the sign-in identifier', $signin_ok, $why);
 
 // ── The interim password is a throwaway, replaced by the operator's ──
 $before = $u->user_pass;

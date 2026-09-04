@@ -793,6 +793,31 @@ trait RestorePilot_Database {
    * word is what stops the trailing "DEFAULT NULL" of a nullable column from
    * reading as one.
    */
+  /**
+   * Every column a table actually has, from its CREATE statement.
+   *
+   * Same line-oriented reading as not_null_columns() above, and for the same
+   * reason: the CREATE text is the one description of the table that travels
+   * inside the archive, so it is what a row can be checked against before
+   * anything has been altered on the live site.
+   *
+   * Index and constraint clauses are skipped -- they open with KEY, PRIMARY,
+   * UNIQUE, CONSTRAINT or FULLTEXT rather than a backquoted column name, which
+   * the pattern already declines to match.
+   */
+  private static function create_table_columns(string $create_sql): array {
+    $columns = [];
+    foreach (preg_split('/\r\n|\r|\n/', $create_sql) as $line) {
+      if (preg_match('/^\s*(PRIMARY|UNIQUE|KEY|INDEX|CONSTRAINT|FULLTEXT|SPATIAL|FOREIGN)\b/i', $line)) {
+        continue;
+      }
+      if (preg_match('/^\s*`([A-Za-z0-9_]+)`\s+/', $line, $m)) {
+        $columns[$m[1]] = true;
+      }
+    }
+    return $columns;
+  }
+
   private static function not_null_columns(string $create_sql): array {
     $columns = [];
     foreach (preg_split('/\r\n|\r|\n/', $create_sql) as $line) {
