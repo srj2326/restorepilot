@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.6
+Stable tag: 0.5.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -190,6 +190,11 @@ Yes. Use `wp restorepilot backup` for a full backup, `wp restorepilot backup --d
 RestorePilot stops immediately, removes maintenance mode, and writes the full error to the Logs tab. A pre-restore rollback point may be available, but you should review the logs and verify the site before retrying.
 
 == Changelog ==
+
+= 0.5.7 =
+* Security: your backups are no longer kept where the web server can hand them out. They were stored under `wp-content/uploads`, protected by an `.htaccess` file — which Apache honours and **nginx ignores completely**. On nginx, which is what most managed WordPress hosting runs, a backup could be downloaded by anyone who knew or guessed its address; the only thing standing in the way was the filename. A backup contains your whole database, including every user account and password hash. Backups are now kept in a directory beside your WordPress installation, which your site has no web address for, and existing backups are moved there automatically the next time you open the plugin. Downloading through the plugin is unchanged and has always required you to be logged in as an administrator.
+* Added: where your host does not allow a directory outside the site to be created, backups stay where they are and RestorePilot now says so in the log instead of assuming the `.htaccess` protected them. It checks by placing a file in the backup folder, requesting it over the web, and reporting what came back.
+* Note: the move copies every file and verifies it has arrived before changing anything, and only removes the originals once the whole set is safely in place. If it cannot finish, nothing is changed and your backups stay exactly where they were.
 
 = 0.5.6 =
 * Fixed: the manual installation instructions in the repository README left out the `includes/` directory, which the plugin loads eighteen files from. Anyone following them got a fatal error instead of a working plugin. Installing through WordPress was never affected.
