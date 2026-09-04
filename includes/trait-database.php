@@ -555,6 +555,58 @@ trait RestorePilot_Database {
    * they are being written to right now, and dropping them fails that restore
    * mid-insert with a table that no longer exists.
    */
+  /**
+   * Is this one of our own scratch tables for this site?
+   *
+   * Matched on the marker rather than on the site prefix, because the name
+   * generator truncates that prefix to keep the unique suffix inside MySQL's
+   * 64-character identifier limit -- see restore_scratch_table_name(). The
+   * sweep used to require the name to begin with the whole, untruncated
+   * prefix, which for any prefix long enough to need truncating could never be
+   * true. Those tables were therefore never dropped, and the journal naming
+   * them was cleared straight afterwards, so nothing was left that knew they
+   * existed. The backup exporter skips them by marker, so they sat in the
+   * database indefinitely without appearing anywhere.
+   *
+   * What is checked instead: the name carries one of our markers, and whatever
+   * precedes it is a leading portion of this site's prefix -- equal when the
+   * prefix was short enough to survive whole, shorter when it was truncated.
+   * That keeps the DROP scope exactly what the generator can produce, without
+   * assuming the prefix arrived intact.
+   */
+  private static function is_own_scratch_table_name(string $table, string $prefix): bool {
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table)) {
+      return false;
+    }
+
+    foreach ([self::RESTORE_TMP_TABLE_MARKER, self::RESTORE_OLD_TABLE_MARKER] as $marker) {
+      $at = strpos($table, $marker);
+      if ($at === false) {
+        continue;
+      }
+
+      // Everything before the marker must be the start of this site's prefix.
+      // An empty leading portion is legitimate: a prefix long enough leaves no
+      // room for any of it.
+      $leading = substr($table, 0, $at);
+      if ($leading !== substr($prefix, 0, strlen($leading))) {
+        return false;
+      }
+
+      // And something has to follow the marker. Deliberately not matched
+      // against the exact shape the current generator makes -- a restore id,
+      // an underscore, an index. That would refuse a leftover from any earlier
+      // naming scheme, orphaning precisely the tables this sweep exists to
+      // collect, and it buys nothing: ownership is already established by our
+      // own marker sitting behind this site's prefix, and the identifier was
+      // checked for safe characters above.
+      $tail = substr($table, $at + strlen($marker));
+      return $tail !== '';
+    }
+
+    return false;
+  }
+
   private static function sweep_stale_restore_tables(string $prefix, string $current_job_id = ''): void {
     $journal = get_option(self::RESTORE_TABLE_JOURNAL_OPTION, []);
     if (!is_array($journal) || !$journal) {
@@ -589,6 +641,7 @@ trait RestorePilot_Database {
         }
       }
 
+      $undropped = [];
       foreach ($tables as $stale) {
         $stale = (string) $stale;
         // Extra safety: only drop names that are still identifier-safe and
@@ -598,16 +651,27 @@ trait RestorePilot_Database {
         if (!preg_match('/^[A-Za-z0-9_]+$/', $stale)) {
           continue;
         }
-        if (strpos($stale, $prefix) !== 0) {
+        if (!self::is_own_scratch_table_name($stale, $prefix)) {
           continue;
         }
-        $rest = substr($stale, strlen($prefix));
-        if (strpos($rest, self::RESTORE_TMP_TABLE_MARKER) !== 0 && strpos($rest, self::RESTORE_OLD_TABLE_MARKER) !== 0) {
-          continue;
-        }
+        $wpdb->last_error = '';
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
         $wpdb->query($wpdb->prepare('DROP TABLE IF EXISTS %i', $stale));
+        if ($wpdb->last_error !== '') {
+          // Keep the record. A table that would not drop is exactly the one
+          // worth remembering: forgetting it is how a scratch table becomes
+          // permanent, taking up space in every backup thereafter with nothing
+          // left that knows what it was.
+          $undropped[] = $stale;
+          self::write_log('Could not sweep stale restore table ' . $stale . ': ' . $wpdb->last_error);
+          continue;
+        }
         self::write_log('Swept stale restore table: ' . $stale);
+      }
+
+      if (!empty($undropped)) {
+        $kept[$owner_job] = $undropped;
+        $undropped = [];
       }
     }
 

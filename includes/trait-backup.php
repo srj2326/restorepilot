@@ -409,6 +409,14 @@ trait RestorePilot_Backup {
         $database_export = self::write_database_export($tmp_db, $job_id);
         $database_parts = $database_export['parts'];
         $manifest['table_count'] = $database_export['table_count'];
+        // Recorded in the archive itself, so what this backup promises travels
+        // with it. Reading a log on the machine that made it is not an option
+        // months later, on a different server, which is exactly when somebody
+        // needs to know whether the tables were read as of one moment.
+        $manifest['consistent_snapshot'] = (bool) ($database_export['consistent_snapshot'] ?? false);
+        if (!empty($database_export['non_transactional_tables'])) {
+          $manifest['non_transactional_tables'] = array_values((array) $database_export['non_transactional_tables']);
+        }
         self::write_log('Database export completed: ' . count($database_parts) . ' part(s).');
 
         if ($job_id !== '') {
@@ -672,7 +680,28 @@ trait RestorePilot_Backup {
       // of concurrent writes elsewhere while the export runs. This does not
       // extend to non-transactional storage engines (e.g. MyISAM) — those are
       // detected and reported below, not silently assumed consistent.
-      $wpdb->query('START TRANSACTION WITH CONSISTENT SNAPSHOT');
+      // Cleared BEFORE the statement, not after. It used to be cleared on the
+      // line below, which threw away whatever the server had said about this
+      // query -- so a snapshot that never opened was indistinguishable from
+      // one that did, and the export went on to be described as consistent.
+      // For a backup that is not a diagnostic detail: the archive can hold a
+      // set of rows that never existed together, while the operator has been
+      // told the opposite.
+      $wpdb->last_error = '';
+      $snapshot_started = $wpdb->query('START TRANSACTION WITH CONSISTENT SNAPSHOT') !== false
+        && $wpdb->last_error === '';
+
+      if (!$snapshot_started) {
+        // Reported and carried on, rather than failing the backup. A backup
+        // taken without a same-moment guarantee is worth far more than no
+        // backup at all -- but only if nobody is told it has one.
+        self::write_log(
+          'Could not open a consistent snapshot for this export'
+          . ($wpdb->last_error !== '' ? ': ' . $wpdb->last_error : '.')
+          . ' The backup was still taken, but tables were read one after another rather than as they stood at a single moment,'
+          . ' so a site being written to during the export may produce an archive whose tables do not quite agree.'
+        );
+      }
 
       $wpdb->last_error = '';
       // Direct query: no WordPress ORM equivalent for SHOW TABLES.
@@ -862,15 +891,28 @@ trait RestorePilot_Backup {
     } finally {
       // Read-only transaction: COMMIT and ROLLBACK are equivalent here.
       // Always close it, success or failure, so it never lingers past this
-      // function even if an exception was thrown above.
-      $wpdb->query('COMMIT');
+      // function even if an exception was thrown above. Only when one was
+      // actually opened: committing a transaction that never started is a
+      // warning on some servers and a lie in the log on all of them.
+      if (!empty($snapshot_started)) {
+        $wpdb->query('COMMIT');
+      }
     }
 
     if ($handle !== null) {
       fclose($handle);
     }
 
-    return ['parts' => $parts, 'table_count' => $table_count];
+    return [
+      'parts' => $parts,
+      'table_count' => $table_count,
+      // Carried out of here so the manifest can record it. A restore, and
+      // anyone reading the archive later, should be able to tell what this
+      // backup actually promises rather than inferring it from the log of the
+      // machine that made it.
+      'consistent_snapshot' => (bool) ($snapshot_started ?? false),
+      'non_transactional_tables' => $non_transactional_tables ?? [],
+    ];
   }
 
   private static function add_selected_paths_to_zip(RestorePilot_Backup_Volume_Writer $zip, array $selected_paths, string $job_id = ''): void {

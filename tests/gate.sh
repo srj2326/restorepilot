@@ -51,6 +51,7 @@ FAST_TESTS=(
   test_restore_source_precedence  # the right file is restored, and Master Reset's modal is reachable
   test_restore_row_idempotence    # a repeated row is not a failure; every other db error still is
   test_storage_not_web_readable   # a backup cannot be fetched by asking the web server for it
+  test_snapshot_and_sweep         # consistency is checked, and long prefixes do not orphan tables
 )
 
 if [[ "$1" == "--install" ]]; then
