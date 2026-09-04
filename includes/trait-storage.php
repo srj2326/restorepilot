@@ -1282,7 +1282,297 @@ trait RestorePilot_Storage {
     }
   }
 
+  /**
+   * Is the backup directory actually readable over HTTP on this server?
+   *
+   * The plugin writes an .htaccess and an index.php and, until this existed,
+   * assumed that settled it. It does not. Nginx does not read .htaccess at all,
+   * and nginx is what most managed WordPress hosting runs -- so on a large
+   * share of real installations the only thing standing between a backup
+   * archive and the open internet was a filename nobody had published. A backup
+   * holds the whole database: every account, every password hash, the site's
+   * salts, and whatever the plugins keep in wp_options.
+   *
+   * Rather than reason about which server is in front of us, this asks. A file
+   * with random contents is written into the backup directory, requested over
+   * HTTP, and removed. If the contents come back, the directory is readable and
+   * the operator needs to know in those words.
+   *
+   * Returns true when reachable, false when refused, and null when the question
+   * could not be answered -- no loopback, a timeout -- which is not the same as
+   * safe and is never reported as such.
+   */
+  /**
+   * A directory for backups that this site cannot serve, or '' if there is none.
+   *
+   * The test is structural rather than configurational. $_SERVER['DOCUMENT_ROOT']
+   * looks like the obvious way to ask, and it is wrong here: under WP-Cron and
+   * the loopback workers this plugin depends on, the request is a CLI one and
+   * that variable is absent or points somewhere unrelated -- measured on this
+   * machine reporting the plugin directory rather than the site. A path that is
+   * not underneath ABSPATH has no URL on this site, whatever the server is
+   * configured to do, and that holds in every context the plugin runs in.
+   *
+   * Sited beside the WordPress directory rather than inside it. Hosts vary in
+   * whether that is writable; where it is not, '' comes back and backups stay
+   * where they are, with storage_is_web_readable() reporting honestly what that
+   * means.
+   */
+  /**
+   * Moves backups out of the web-served uploads directory, once.
+   *
+   * Ordered so that no failure can lose an archive. Everything is copied and
+   * each copy checked by size before anything is removed; the recorded storage
+   * location is written only after the whole set has arrived; and originals are
+   * deleted last, after that switch. A crash at any point leaves the archives
+   * readable from wherever STORAGE_PATH_OPTION currently points, which is the
+   * old location until the move has completely succeeded.
+   *
+   * A rename would be faster and is deliberately not used: it is only atomic
+   * within one filesystem, and a private directory beside the site may well be
+   * on another. Copy-verify-delete is slower and cannot half-move a file.
+   *
+   * @return array{moved:int,failed:string[],to:string} What went, what would
+   *   not, and where. An empty 'to' means nothing was attempted.
+   */
+  private static function migrate_storage_to_private(): array {
+    $result = ['moved' => 0, 'failed' => [], 'to' => ''];
+
+    $private = self::private_storage_root();
+    if ($private === '') {
+      return $result;
+    }
+
+    $from = self::public_storage_dir();
+    if (!is_dir($from) || realpath($from) === realpath($private)) {
+      // Nothing to move, but the location is still worth recording so future
+      // backups are written outside the site.
+      update_option(self::STORAGE_PATH_OPTION, $private, false);
+      $result['to'] = $private;
+      return $result;
+    }
+
+    $files = [];
+    $iterator = new RecursiveIteratorIterator(
+      new RecursiveDirectoryIterator($from, FilesystemIterator::SKIP_DOTS),
+      RecursiveIteratorIterator::SELF_FIRST
+    );
+    foreach ($iterator as $item) {
+      $files[] = $item;
+    }
+
+    // 1. Copy everything, checking each arrival.
+    foreach ($files as $item) {
+      $relative = substr($item->getPathname(), strlen($from) + 1);
+      $target = $private . '/' . $relative;
+
+      if ($item->isDir()) {
+        if (!is_dir($target) && !wp_mkdir_p($target)) {
+          $result['failed'][] = $relative;
+        }
+        continue;
+      }
+
+      if (!is_dir(dirname($target)) && !wp_mkdir_p(dirname($target))) {
+        $result['failed'][] = $relative;
+        continue;
+      }
+
+      if (!@copy($item->getPathname(), $target)) {
+        $result['failed'][] = $relative;
+        continue;
+      }
+
+      // Verified rather than assumed: a copy that ran out of disk part way
+      // returns success on some systems and leaves a truncated file.
+      if (filesize($target) !== $item->getSize()) {
+        @unlink($target);
+        $result['failed'][] = $relative;
+        continue;
+      }
+
+      $result['moved']++;
+    }
+
+    // 2. Anything at all went wrong: leave both copies and change nothing.
+    //    A partial move that switched over would hide archives.
+    if ($result['failed']) {
+      self::write_log('Could not move ' . count($result['failed']) . ' file(s) out of the web-served backup directory; leaving backups where they are.');
+      return $result;
+    }
+
+    // 3. Only now does anything start reading from the new location.
+    update_option(self::STORAGE_PATH_OPTION, $private, false);
+    $result['to'] = $private;
+
+    // 4. And only now are the originals removed -- from a directory nothing
+    //    points at any more.
+    foreach (array_reverse($files) as $item) {
+      if ($item->isDir()) {
+        @rmdir($item->getPathname());
+      } else {
+        @unlink($item->getPathname());
+      }
+    }
+
+    self::write_log(sprintf(
+      'Moved %d backup file(s) out of the web-served uploads directory to %s, which this site cannot serve.',
+      $result['moved'],
+      $private
+    ));
+
+    delete_transient(self::STORAGE_EXPOSURE_TRANSIENT);
+
+    return $result;
+  }
+
+  /**
+   * Runs the move once, from a place where it is safe to run it.
+   *
+   * Hooked to admin_init rather than to ensure_storage(). ensure_storage() is
+   * called by the loopback and cron workers too, and moving a restore's source
+   * archive out from underneath the worker reading it is a way to break the one
+   * operation this plugin exists to get right. An administrator loading a page
+   * is a moment when nothing is mid-flight.
+   *
+   * Deliberately silent when it cannot act. A host that will not let anything
+   * be written beside the site is not doing anything wrong, and the Status tab
+   * says what that means for backups there.
+   */
+  public static function maybe_migrate_storage(): void {
+    if (get_option(self::STORAGE_PATH_OPTION, '') !== '') {
+      return;
+    }
+    if (!current_user_can('manage_options')) {
+      return;
+    }
+    // Never while there is work in flight: a backup being written or a restore
+    // reading its archive both hold paths that are about to change.
+    if (self::backup_lock_is_active() || self::restore_lock_is_active()) {
+      return;
+    }
+    if (self::private_storage_root() === '') {
+      return;
+    }
+
+    self::migrate_storage_to_private();
+  }
+
+  private static function private_storage_root(): string {
+    // An explicit choice always wins: a host or an administrator who has
+    // somewhere better knows more about this server than we can infer.
+    if (defined('RESTOREPILOT_STORAGE_DIR')) {
+      $forced = untrailingslashit((string) RESTOREPILOT_STORAGE_DIR);
+      return ($forced !== '' && self::directory_is_usable($forced)) ? $forced : '';
+    }
+
+    $abspath = realpath(untrailingslashit(ABSPATH));
+    if ($abspath === false) {
+      return '';
+    }
+
+    $candidate = dirname($abspath) . '/' . self::PRIVATE_STORAGE_DIRNAME;
+
+    // Refuse anything that would land back inside the site, which is what
+    // happens when WordPress is installed at the filesystem root or in a
+    // container where dirname() does not climb out.
+    $resolved = realpath(dirname($candidate));
+    if ($resolved === false || $resolved === $abspath || strpos($resolved . '/', $abspath . '/') === 0) {
+      return '';
+    }
+
+    return self::directory_is_usable($candidate) ? $candidate : '';
+  }
+
+  /** Creatable and writable, without leaving a directory behind if it is not. */
+  private static function directory_is_usable(string $dir): bool {
+    $existed = is_dir($dir);
+    if (!$existed && !wp_mkdir_p($dir)) {
+      return false;
+    }
+    if (!is_writable($dir)) {
+      if (!$existed) {
+        @rmdir($dir);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private static function storage_is_web_readable(bool $fresh = false): ?bool {
+    $cached = get_transient(self::STORAGE_EXPOSURE_TRANSIENT);
+    if (!$fresh && $cached !== false) {
+      return $cached === 'open' ? true : ($cached === 'closed' ? false : null);
+    }
+
+    $dir = self::backup_dir();
+    if (!is_dir($dir) || !is_writable($dir)) {
+      return null;
+    }
+
+    $token = 'restorepilot-canary-' . wp_generate_password(32, false, false);
+    $name  = 'rp-canary-' . wp_generate_password(16, false, false) . '.txt';
+    $path  = trailingslashit($dir) . $name;
+
+    if (@file_put_contents($path, $token) === false) {
+      return null;
+    }
+
+    $upload = wp_upload_dir(null, false);
+    $url = trailingslashit($upload['baseurl']) . 'restorepilot-backup-migration/backups/' . $name;
+
+    $response = wp_remote_get($url, [
+      'timeout'   => 10,
+      'sslverify' => false,
+      // A cached copy would answer for the cache, not for this server.
+      'headers'   => ['Cache-Control' => 'no-cache'],
+    ]);
+
+    @unlink($path);
+
+    if (is_wp_error($response)) {
+      // The site could not reach itself. That says nothing about whether a
+      // visitor could, so it is recorded as unknown rather than as safe.
+      set_transient(self::STORAGE_EXPOSURE_TRANSIENT, 'unknown', HOUR_IN_SECONDS);
+      return null;
+    }
+
+    $code = (int) wp_remote_retrieve_response_code($response);
+    $body = (string) wp_remote_retrieve_body($response);
+
+    // Only the contents coming back proves it was served. A 200 carrying a
+    // login page or a soft 404 does not.
+    $open = ($code === 200 && strpos($body, $token) !== false);
+
+    set_transient(self::STORAGE_EXPOSURE_TRANSIENT, $open ? 'open' : 'closed', $open ? HOUR_IN_SECONDS : DAY_IN_SECONDS);
+    if ($open) {
+      self::write_log('Backup directory is readable over HTTP on this server. Archives are only protected by their filenames.');
+    }
+
+    return $open;
+  }
+
+  /**
+   * Where backups are kept.
+   *
+   * Answers from STORAGE_PATH_OPTION, which is only written once a move has
+   * finished and been checked. Until then this keeps naming the uploads
+   * directory, so a migration that fails half way cannot leave archives
+   * somewhere nothing looks for them -- the failure mode that matters most in
+   * a plugin whose whole purpose is having the backup when it is needed.
+   */
   private static function storage_dir(): string {
+    $recorded = (string) get_option(self::STORAGE_PATH_OPTION, '');
+    if ($recorded !== '' && is_dir($recorded) && is_writable($recorded)) {
+      return untrailingslashit($recorded);
+    }
+
+    $upload = wp_upload_dir(null, false);
+    return trailingslashit($upload['basedir']) . 'restorepilot-backup-migration';
+  }
+
+  /** The uploads location, named directly, for migrating away from it. */
+  private static function public_storage_dir(): string {
     $upload = wp_upload_dir(null, false);
     return trailingslashit($upload['basedir']) . 'restorepilot-backup-migration';
   }

@@ -50,6 +50,7 @@ FAST_TESTS=(
   test_job_lost_update    # a progress tick never resurrects a cancelled job
   test_restore_source_precedence  # the right file is restored, and Master Reset's modal is reachable
   test_restore_row_idempotence    # a repeated row is not a failure; every other db error still is
+  test_storage_not_web_readable   # a backup cannot be fetched by asking the web server for it
 )
 
 if [[ "$1" == "--install" ]]; then

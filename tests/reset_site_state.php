@@ -151,7 +151,18 @@ if ($row) {
 }
 
 // 4. Status and token files belonging to jobs that no longer exist.
+// Read from the option rather than assumed, because backups no longer live
+// under uploads: they are kept beside the site now, where the web server has
+// no URL for them. Left hardcoded, this quietly stopped cleaning anything at
+// all -- status files, poll tokens and abandoned upload zips accumulated
+// across the whole suite, and the first test to notice was one whose timing
+// depends on starting from a clean directory.
 $storage = $site . '/wp-content/uploads/restorepilot-backup-migration';
+$res = $db->query("SELECT option_value FROM wp_options WHERE option_name = 'restorepilot_storage_path'");
+$row = $res ? $res->fetch_row() : null;
+if ($row && is_string($row[0]) && $row[0] !== '' && is_dir($row[0])) {
+    $storage = rtrim($row[0], '/');
+}
 $files = 0;
 foreach (['restore-status-*.json', 'poll-token-*.txt', 'restore-upload-*.zip'] as $pattern) {
     foreach (glob($storage . '/' . $pattern) ?: [] as $f) { @unlink($f); $files++; }

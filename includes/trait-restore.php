@@ -2173,19 +2173,44 @@ trait RestorePilot_Restore {
       return false;
     }
 
+    // Two places are allowed, and both are needed.
+    //
+    // The uploads directory, because that is where an operator is told to put
+    // a large archive they have moved onto the server themselves.
+    //
+    // And the plugin's own storage, which is no longer inside uploads: backups
+    // are kept beside the site now, where this server has no URL for them.
+    // Leaving this checking uploads alone silently refused every backup the
+    // plugin had made -- caught by the restore-source test, which restores
+    // from exactly those paths.
+    $allowed = [];
+
     $upload = wp_upload_dir(null, false);
-    if (!empty($upload['error']) || empty($upload['basedir'])) {
-      return false;
+    if (empty($upload['error']) && !empty($upload['basedir'])) {
+      $base = realpath($upload['basedir']);
+      if ($base !== false) {
+        $allowed[] = $base;
+      }
     }
 
-    $uploads_base = realpath($upload['basedir']);
-    if ($uploads_base === false) {
+    $storage = realpath(self::storage_dir());
+    if ($storage !== false) {
+      $allowed[] = $storage;
+    }
+
+    if (!$allowed) {
       return false;
     }
 
     $real_path = str_replace('\\', '/', $real_path);
-    $uploads_base = rtrim(str_replace('\\', '/', $uploads_base), '/');
-    return $real_path === $uploads_base || strpos($real_path, $uploads_base . '/') === 0;
+    foreach ($allowed as $dir) {
+      $dir = rtrim(str_replace('\\', '/', $dir), '/');
+      if ($real_path === $dir || strpos($real_path, $dir . '/') === 0) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private static function assemble_restore_chunks(string $upload_id, string $file_name, int $total_chunks): string {

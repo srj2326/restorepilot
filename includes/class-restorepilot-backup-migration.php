@@ -138,6 +138,17 @@ final class RestorePilot_Backup_Migration {
   const RESTORE_TABLE_JOURNAL_OPTION = 'restorepilot_restore_table_journal';
   const LOG_OPTION = 'restorepilot_recent_log';
   const SETTINGS_OPTION = 'restorepilot_settings';
+  // Result of the last check on whether the backup directory answers to an
+  // HTTP request. Cached because the check is a real round trip; kept for an
+  // hour when it is reachable, so a fix shows up promptly, and a day when it
+  // is not.
+  const STORAGE_EXPOSURE_TRANSIENT = 'restorepilot_storage_exposure';
+  // Where backups actually live. Written only after a move has completed and
+  // been verified, so a migration that fails part way leaves every archive
+  // findable at the location this still names.
+  const STORAGE_PATH_OPTION = 'restorepilot_storage_path';
+  // Name of the directory created outside the site when one can be.
+  const PRIVATE_STORAGE_DIRNAME = 'restorepilot-private-storage';
   const RESTORE_SUCCESS_OPTION = 'restorepilot_restore_success_notice';
   private static $initialized = false;
   private static $error_logging_enabled = false;

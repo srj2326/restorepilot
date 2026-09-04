@@ -91,6 +91,9 @@ function restorepilot_backup_migration_bootstrap(): void {
   $bootstrapped = true;
   add_action('admin_menu', ['RestorePilot_Backup_Migration', 'admin_menu']);
   add_action('admin_init', ['RestorePilot_Backup_Migration', 'register_privacy_policy_content']);
+  // Moves backups out of the web-served uploads directory, once, from a request
+  // where nothing is mid-flight. See maybe_migrate_storage().
+  add_action('admin_init', ['RestorePilot_Backup_Migration', 'maybe_migrate_storage']);
   add_action('admin_enqueue_scripts', ['RestorePilot_Backup_Migration', 'enqueue_admin_assets']);
   add_action('admin_notices', ['RestorePilot_Backup_Migration', 'render_restore_success_notice']);
   add_action('admin_notices', ['RestorePilot_Backup_Migration', 'render_operation_notices']);
