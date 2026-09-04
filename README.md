@@ -36,7 +36,7 @@ The supported way to install RestorePilot is through WordPress:
 2. Search for "RestorePilot".
 3. Click **Install Now**, then **Activate**.
 
-This repository is the plugin's development source, kept in sync with what's published on WordPress.org. If you'd rather install from here, copy `restorepilot-backup-migration.php`, `readme.txt`, `uninstall.php`, and `assets/` into `wp-content/plugins/restorepilot-backup-migration/` and activate it the normal way.
+This repository is the plugin's development source, kept in sync with what's published on WordPress.org. If you'd rather install from here, copy `restorepilot-backup-migration.php`, `readme.txt`, `uninstall.php`, `assets/`, and `includes/` into `wp-content/plugins/restorepilot-backup-migration/` and activate it the normal way.
 
 ## Requirements
 

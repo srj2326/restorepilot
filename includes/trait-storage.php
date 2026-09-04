@@ -84,14 +84,24 @@ trait RestorePilot_Storage {
    * Returns how many entries went, so the result can say so rather than
    * leaving the operator to check a directory they may not know exists.
    */
-  private static function master_reset_wipe_mu_plugins(): int {
+  /**
+   * @return array{removed:int,failed:string[]} Names that could not be removed
+   *   are returned, not just a count of the ones that were. A must-use plugin
+   *   loads on every single request, so one left behind after the operator
+   *   asked for it to go is still running -- and counting only successes meant
+   *   the reset could report a "clean WordPress installation" with it still
+   *   there. Whoever asked for it gone is the last person who should have to
+   *   go and check.
+   */
+  private static function master_reset_wipe_mu_plugins(): array {
     $dir = defined('WPMU_PLUGIN_DIR') ? (string) WPMU_PLUGIN_DIR : self::content_dir() . '/mu-plugins';
     $real = realpath($dir);
     if ($real === false || !is_dir($real)) {
-      return 0;
+      return ['removed' => 0, 'failed' => []];
     }
 
     $removed = 0;
+    $failed = [];
     foreach (new DirectoryIterator($real) as $item) {
       if ($item->isDot()) {
         continue;
@@ -104,13 +114,17 @@ trait RestorePilot_Storage {
       if ($item->isDir()) {
         if (self::delete_directory($path, $real)) {
           $removed++;
+        } else {
+          $failed[] = $name;
         }
       } elseif (@unlink($path) || !file_exists($path)) {
         $removed++;
+      } else {
+        $failed[] = $name;
       }
     }
 
-    return $removed;
+    return ['removed' => $removed, 'failed' => $failed];
   }
 
   private static function master_reset_wipe_dir(string $dir, string $allowed_parent, bool $include_own_storage = false): bool {

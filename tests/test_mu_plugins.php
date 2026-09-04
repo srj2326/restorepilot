@@ -1,4 +1,15 @@
 <?php
+// Command line only. These scripts live inside the plugin directory so they
+// survive alongside the code they test -- which also puts them under the web
+// root, where a request could otherwise reach one. Several boot WordPress as
+// user 1 and then reset sites, delete users, or set passwords, so reaching one
+// over HTTP has to be impossible rather than unlikely. Checked before anything
+// else runs, including the WordPress load below.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit(1);
+}
+
 /**
  * Must-use plugins survived Master Reset entirely, so a site it described as
  * "a clean WordPress installation" still had every one of them loading on
@@ -122,11 +133,48 @@ check('THE DEFAULT: a reset that was not asked to remove them leaves every one a
     sprintf('%d before, %d after', count($before), count($after_default)));
 
 // --- On request: they go ----------------------------------------------------
-$removed = call_private('master_reset_wipe_mu_plugins');
+$result = call_private('master_reset_wipe_mu_plugins');
+$removed = (int) $result['removed'];
 $after_purge = call_private('mu_plugin_entries');
 check('When asked, they are removed', empty($after_purge),
     $after_purge ? 'left behind: ' . implode(', ', $after_purge) : sprintf('%d removed', $removed));
 check('It reports how many went, so the result can say so', $removed >= count($fixtures));
+
+// It used to return a count and nothing else, so anything that would not
+// delete was invisible and the reset could still call the site clean. A
+// must-use plugin loads on every request: one left behind is still running.
+check('It also reports what it could NOT remove, not just what it could',
+    is_array($result) && array_key_exists('failed', $result) && is_array($result['failed']));
+check('Nothing is reported as failed when everything went', $result['failed'] === [],
+    $result['failed'] ? implode(', ', $result['failed']) : '');
+
+// A file the filesystem refuses to delete has to be named, not counted.
+$stubborn_dir = $mu_dir . '/rp-test-stubborn';
+// Writable first, then sealed. Creating it read-only means the file inside it
+// cannot be written either, and the fixture tests nothing while emitting
+// warnings that look like the failure it is supposed to be staging.
+mkdir($stubborn_dir, 0755, true);
+file_put_contents($stubborn_dir . '/inner.php', "<?php\n");
+chmod($stubborn_dir, 0555);
+$hard = call_private('master_reset_wipe_mu_plugins');
+$named = in_array('rp-test-stubborn', $hard['failed'], true);
+// Running as the owner, macOS may still allow the unlink; only assert the
+// contract when the directory genuinely resisted.
+if (is_dir($stubborn_dir)) {
+    check('An entry that would not delete is named in the failures', $named,
+        'failed: ' . implode(', ', $hard['failed']));
+} else {
+    echo "SKIP  the filesystem allowed the delete, so there was no failure to report\n";
+}
+chmod($stubborn_dir, 0755);
+@chmod($stubborn_dir . '/inner.php', 0644);
+@unlink($stubborn_dir . '/inner.php');
+@rmdir($stubborn_dir);
+
+// And the reset must surface it rather than reporting a clean installation.
+$handler_src = file_get_contents(dirname(__DIR__) . '/includes/trait-request-handlers.php');
+check('Master Reset records that failure as a problem with the reset',
+    strpos($handler_src, "could not remove must-use plugin(s): ") !== false);
 check("WordPress's own index.php guard is left in place", is_file($mu_dir . '/index.php'));
 
 // --- The operator can see what they are agreeing to -------------------------

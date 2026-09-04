@@ -946,7 +946,13 @@ trait RestorePilot_RequestHandlers {
     $upload = wp_upload_dir(null, false);
     if (empty($upload['error']) && !empty($upload['basedir'])) {
       if ($purge_mu) {
-        $removed_mu = self::master_reset_wipe_mu_plugins();
+        $mu_result = self::master_reset_wipe_mu_plugins();
+        $removed_mu = (int) $mu_result['removed'];
+        if (!empty($mu_result['failed'])) {
+          // Named, not counted: the operator needs to know which ones are still
+          // loading on every request, and a bare number does not tell them.
+          $reset_problems[] = 'could not remove must-use plugin(s): ' . implode(', ', $mu_result['failed']);
+        }
       }
 
       if (!self::master_reset_wipe_dir($upload['basedir'], self::content_dir(), $purge_backups)) {

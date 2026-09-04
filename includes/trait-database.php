@@ -456,7 +456,7 @@ trait RestorePilot_Database {
   }
 
   /** Forgets one restore's scratch tables, leaving any other restore's alone. */
-  private static function clear_restore_table_journal(string $job_id = null): void {
+  private static function clear_restore_table_journal(?string $job_id = null): void {
     if ($job_id === null) {
       delete_option(self::RESTORE_TABLE_JOURNAL_OPTION);
       return;

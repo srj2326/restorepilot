@@ -1,4 +1,15 @@
 <?php
+// Command line only. These scripts live inside the plugin directory so they
+// survive alongside the code they test -- which also puts them under the web
+// root, where a request could otherwise reach one. Several boot WordPress as
+// user 1 and then reset sites, delete users, or set passwords, so reaching one
+// over HTTP has to be impossible rather than unlikely. Checked before anything
+// else runs, including the WordPress load below.
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit(1);
+}
+
 // Regression tests for the locking/retention fixes from the full-plugin
 // audit: (1) enforce_backup_retention() must not run while a restore is
 // active, (2) force_release_restore_locks() must release the worker lock
