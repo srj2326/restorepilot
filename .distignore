@@ -1,0 +1,56 @@
+# Everything here is excluded from the release package.
+#
+# Used by WP-CLI's `wp dist-archive` and by the 10up deploy action, which
+# prefers this file over .gitattributes when both exist. Ignore patterns only --
+# .distignore has no negation syntax, so nothing below can be re-included.
+#
+# The rule this encodes: development material stays in the repository and out of
+# the artifact. It is not a tidiness preference. tests/ contains scripts that
+# boot WordPress as user 1 and run Master Reset, and the plugin directory sits
+# under the web root on a live site.
+
+# Version control and CI
+/.git
+/.github
+/.gitignore
+/.gitattributes
+/.distignore
+
+# Development tooling and editor state
+/.claude
+/.vscode
+/.idea
+/node_modules
+/vendor
+/composer.json
+/composer.lock
+/package.json
+/package-lock.json
+/phpunit.xml
+/phpcs.xml
+/.editorconfig
+
+# The regression suite. Never ship this: see build.sh, which fails the build
+# if any of it reaches the staging directory.
+/tests
+
+# Internal review history
+/CODEX-REVIEW.md
+CODEX-AUDIT-*.md
+
+# GitHub-facing readme. WordPress.org reads readme.txt instead.
+/README.md
+
+# WordPress.org listing assets (banner, icon, screenshots) live in SVN's own
+# top-level assets/ directory, a sibling of trunk/ -- not inside the plugin.
+/.wordpress-org
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# The build script itself.
+/build.sh
+/dist

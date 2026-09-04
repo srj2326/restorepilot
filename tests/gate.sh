@@ -17,6 +17,26 @@ SITE_DIR="/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-content/plugi
 PHP_BIN="/Users/surajitroy/Library/Application Support/Local/lightning-services/php-8.2.29+0/bin/darwin-arm64/bin/php"
 SOCK="/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock"
 
+# The release package is checked on every commit, not only at release time.
+# An allowlist that is never exercised is a list of good intentions, and the
+# thing it keeps out of the artifact is a directory of scripts that run Master
+# Reset without asking.
+package_check() {
+  if [[ ! -x "$PLUGIN_DIR/build.sh" ]]; then
+    echo "SKIP  build.sh not found"
+    return 0
+  fi
+  local out
+  out=$(PHP_BIN="$PHP_BIN" "$PLUGIN_DIR/build.sh" 2>&1)
+  if [[ $? -ne 0 ]]; then
+    echo "FAIL  release package"
+    echo "$out" | grep '  FAIL  ' | head -10
+    return 1
+  fi
+  echo "PASS  release package contains only what may ship"
+  return 0
+}
+
 FAST_TESTS=(
   test_plugin_paths        # the plugin knows which directory is its own
   test_fresh_job_read      # the post-lock re-read reaches the database
@@ -119,7 +139,10 @@ if ($bad) { echo "FAIL  require paths: " . implode(", ", $bad) . "\n"; exit(1); 
 printf("PASS  all %d require paths resolve (case-sensitive)\n", count($m[1]));
 ' "$PLUGIN_DIR" || fail=1
 
-# --- 5. The fast behavioural tests ----------------------------------------
+# --- 5. The release package -----------------------------------------------
+package_check || fail=1
+
+# --- 6. The fast behavioural tests ----------------------------------------
 # Run against the test site, so it gets the code being committed first.
 if [ -d "$SITE_DIR/includes" ]; then
   cp "$PLUGIN_DIR"/*.php "$SITE_DIR/" 2>/dev/null
