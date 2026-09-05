@@ -1684,7 +1684,22 @@ trait RestorePilot_Restore {
       self::write_log('No usable email was given for the restore admin account; deriving one from this site instead.');
       $host = wp_parse_url(home_url(), PHP_URL_HOST);
       $host = is_string($host) && $host !== '' ? $host : 'example.com';
-      $email = 'admin_' . strtolower(wp_generate_password(6, false, false)) . '@' . $host;
+      $local = 'admin_' . strtolower(wp_generate_password(6, false, false));
+      $email = $local . '@' . $host;
+      // A host with no dot in it is not a valid email domain, and is_email()
+      // rejects one: "localhost", or a bare intranet hostname. Found
+      // by CI, whose fixture site is at http://localhost -- the case a local
+      // development restore hits every time. wp_insert_user() accepts the
+      // address regardless, so the account is still created and nobody is
+      // locked out, but the user record carries something no validator will
+      // accept afterwards.
+      //
+      // .invalid is reserved by RFC 2606 and can never resolve, which is the
+      // honest label here: there was no address to deliver to in the first
+      // place, or we would not be deriving one.
+      if (!is_email($email)) {
+        $email = $local . '@' . $host . '.invalid';
+      }
     }
 
     // An address already in use in the RESTORED site cannot be reused —

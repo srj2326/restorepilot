@@ -144,9 +144,22 @@ check('Every gate in front of it is still there',
     strpos($html, 'id="rp-master-reset-ack"') !== false
     && strpos($html, 'id="rp-master-reset-confirm-input"') !== false
     && strpos($html, 'placeholder="RESET"') !== false);
-check('Removing backups and must-use plugins are still opt-in',
-    strpos($html, 'id="rp-master-reset-purge-backups"') !== false
-    && strpos($html, 'id="rp-master-reset-purge-mu"') !== false);
+check('Removing stored backups is still opt-in',
+    strpos($html, 'id="rp-master-reset-purge-backups"') !== false);
+
+// The must-use plugin option is only offered when the site has any, which is
+// right: there is no point asking whether to delete nothing. This asserted it
+// unconditionally and so depended on the fixture having mu-plugins from an
+// earlier test -- it failed on CI's clean WordPress, which has none.
+$mu = new ReflectionMethod('RestorePilot_Backup_Migration', 'mu_plugin_entries');
+$mu->setAccessible(true);
+if ($mu->invoke(null)) {
+    check('Removing must-use plugins is offered, and is opt-in',
+        strpos($html, 'id="rp-master-reset-purge-mu"') !== false);
+} else {
+    check('Must-use plugins are not offered when the site has none',
+        strpos($html, 'id="rp-master-reset-purge-mu"') === false);
+}
 
 echo "\n" . ($failures ? (count($failures) . ' FAILURE(S): ' . implode('; ', $failures)) : 'ALL CHECKS PASSED') . "\n";
 

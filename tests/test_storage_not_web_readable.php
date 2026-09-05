@@ -56,6 +56,22 @@ function fetch(string $url): array {
     return ['code' => (int) wp_remote_retrieve_response_code($r), 'body' => (string) wp_remote_retrieve_body($r), 'error' => ''];
 }
 
+/**
+ * Is a web server actually serving this site?
+ *
+ * Everything below asks the web server a question, and CI installs WordPress
+ * with wp-cli and never starts one -- so the probe correctly answers "I could
+ * not tell", and comparing that to an expectation fails for a reason that has
+ * nothing to do with storage. A test that cannot run should say so rather than
+ * report a defect that is not there.
+ */
+$home_probe = wp_remote_get(home_url('/'), ['timeout' => 10, 'sslverify' => false]);
+$site_is_served = !is_wp_error($home_probe) && (int) wp_remote_retrieve_response_code($home_probe) > 0;
+if (!$site_is_served) {
+    echo "NOTE  no web server is serving " . home_url('/') . "\n";
+    echo "      the reachability checks below need one and are skipped; the rest still run\n\n";
+}
+
 $public_dir = priv('public_storage_dir');
 $uploads    = wp_upload_dir(null, false);
 $public_url = trailingslashit($uploads['baseurl']) . 'restorepilot-backup-migration';
@@ -82,9 +98,13 @@ echo '  ' . ($was_exposed
     ? "this server serves that directory -- which is the whole problem\n"
     : "this server refuses it, so the move is belt and braces here\n");
 
-check('The plugin can tell whether its storage is reachable',
-    priv('storage_is_web_readable', [true]) === $was_exposed,
-    'it must not report safe when a request can fetch a file');
+if ($site_is_served) {
+    check('The plugin can tell whether its storage is reachable',
+        priv('storage_is_web_readable', [true]) === $was_exposed,
+        'it must not report safe when a request can fetch a file');
+} else {
+    echo "SKIP  The plugin can tell whether its storage is reachable (needs a web server)\n";
+}
 
 // ── The move ───────────────────────────────────────────────────────────────
 echo "\n=== moving the archives somewhere this site has no URL for ===\n";
@@ -118,11 +138,18 @@ check('It is no longer left behind in the served directory',
 
 // ── And it can no longer be fetched ────────────────────────────────────────
 echo "\n=== after: asking the web server for it again ===\n";
-$after = fetch($public_url . '/backups/' . $sentinel_name);
-printf("  HTTP %d\n", $after['code']);
-check('THE FIX: a request for that backup no longer returns it',
-    $after['code'] !== 200 || strpos($after['body'], 'BACKUP-CONTENT-') === false,
-    $after['code'] === 200 ? 'it was served' : 'refused');
+if ($site_is_served) {
+    $after = fetch($public_url . '/backups/' . $sentinel_name);
+    printf("  HTTP %d\n", $after['code']);
+    check('THE FIX: a request for that backup no longer returns it',
+        $after['code'] !== 200 || strpos($after['body'], 'BACKUP-CONTENT-') === false,
+        $after['code'] === 200 ? 'it was served' : 'refused');
+} else {
+    // Would pass for the wrong reason: with nothing listening, no request
+    // returns anything, so "the backup is no longer served" is trivially true
+    // and proves nothing about the move.
+    echo "SKIP  THE FIX: a request for that backup no longer returns it (needs a web server)\n";
+}
 
 // The plugin must now agree that it is not reachable.
 delete_transient(konst('STORAGE_EXPOSURE_TRANSIENT'));
@@ -180,10 +207,14 @@ $restore_option = (string) get_option(konst('STORAGE_PATH_OPTION'), '');
 update_option(konst('STORAGE_PATH_OPTION'), $exposed, false);
 delete_transient(konst('STORAGE_EXPOSURE_TRANSIENT'));
 
-$verdict = priv('storage_is_web_readable', [true]);
-check('THE FIX: it is reported as reachable rather than assumed safe',
-    $verdict === $was_exposed,
-    'probe says ' . var_export($verdict, true) . '; this server serves that directory: ' . var_export($was_exposed, true));
+if ($site_is_served) {
+    $verdict = priv('storage_is_web_readable', [true]);
+    check('THE FIX: it is reported as reachable rather than assumed safe',
+        $verdict === $was_exposed,
+        'probe says ' . var_export($verdict, true) . '; this server serves that directory: ' . var_export($was_exposed, true));
+} else {
+    echo "SKIP  THE FIX: it is reported as reachable rather than assumed safe (needs a web server)\n";
+}
 
 foreach (glob($exposed . '/backups/*') ?: [] as $f) { @unlink($f); }
 @rmdir($exposed . '/backups');
