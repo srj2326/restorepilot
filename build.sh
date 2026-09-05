@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 #
 # Builds the release package and then checks what it actually contains.
 #
@@ -23,8 +23,8 @@ SLUG="restorepilot-backup-migration"
 STAGE="$ROOT/dist/$SLUG"
 FAILURES=0
 
-fail() { print -r -- "  FAIL  $1"; FAILURES=$((FAILURES + 1)); }
-ok()   { print -r -- "  ok    $1"; }
+fail() { printf '%s\n' "  FAIL  $1"; FAILURES=$((FAILURES + 1)); }
+ok()   { printf '%s\n' "  ok    $1"; }
 
 # Everything permitted in the package. Nothing else is copied, and the checks
 # below confirm nothing else arrived by another route.
@@ -36,11 +36,13 @@ ALLOW=(
   includes
 )
 
-print -r -- "Building $SLUG"
+printf '%s\n' "Building $SLUG"
 rm -rf "$ROOT/dist"
 mkdir -p "$STAGE"
 
-for entry in $ALLOW; do
+# "${ALLOW[@]}", not $ALLOW: bash expands the bare name to the first
+# element only, which staged a single file and called it a package.
+for entry in "${ALLOW[@]}"; do
   if [[ ! -e "$ROOT/$entry" ]]; then
     fail "allowlisted entry is missing from the source tree: $entry"
     continue
@@ -67,8 +69,12 @@ done < <(find "$STAGE" \( \
 
 # --- Only allowlisted entries at the top level ------------------------------
 unexpected=0
-for entry in "$STAGE"/*(N) "$STAGE"/.*(N); do
-  name="${entry:t}"
+# nullglob so an empty directory contributes nothing rather than a literal
+# pattern; dotglob so dotfiles are checked too. Both were zsh (N) qualifiers,
+# which no bash on a CI runner understands.
+shopt -s nullglob dotglob
+for entry in "$STAGE"/*; do
+  name="${entry##*/}"
   [[ "$name" == "." || "$name" == ".." ]] && continue
   if [[ ! " ${ALLOW[*]} " == *" $name "* ]]; then
     fail "unexpected top-level entry: $name"
@@ -84,10 +90,10 @@ done
 missing_requires=$(
   grep -oE "require_once __DIR__ \. '[^']+'" "$STAGE/$SLUG.php" \
   | sed "s|require_once __DIR__ \. '||; s|'$||" \
-  | while IFS= read -r rel; do [[ -f "$STAGE$rel" ]] || print -r -- "$rel"; done
+  | while IFS= read -r rel; do [[ -f "$STAGE$rel" ]] || printf '%s\n' "$rel"; done
 )
 if [[ -n "$missing_requires" ]]; then
-  print -r -- "$missing_requires" | while IFS= read -r m; do fail "require does not resolve in the package: $m"; done
+  printf '%s\n' "$missing_requires" | while IFS= read -r m; do fail "require does not resolve in the package: $m"; done
 else
   ok "all $(grep -c 'require_once __DIR__' "$STAGE/$SLUG.php") runtime requires resolve"
 fi
@@ -118,7 +124,7 @@ if command -v "$PHP_BIN" >/dev/null 2>&1; then
   done < <(find "$STAGE" -name '*.php')
   [[ $syntax_bad -eq 0 ]] && ok "every PHP file in the package parses"
 else
-  print -r -- "  skip  no PHP binary on PATH (set PHP_BIN to check syntax)"
+  printf '%s\n' "  skip  no PHP binary on PATH (set PHP_BIN to check syntax)"
 fi
 
 printf "\n%s files, %s\n" "$(find "$STAGE" -type f | wc -l | tr -d ' ')" "$(du -sh "$STAGE" | cut -f1)"
@@ -131,7 +137,7 @@ fi
 if [[ "${1:-}" == "--zip" ]]; then
   ZIP="$ROOT/dist/$SLUG.$hdr.zip"
   ( cd "$ROOT/dist" && zip -qr "$ZIP" "$SLUG" -x '*.DS_Store' )
-  print -r -- "wrote ${ZIP#$ROOT/}"
+  printf '%s\n' "wrote ${ZIP#$ROOT/}"
 fi
 
 printf "\nBUILD OK -- dist/%s is what may be published.\n" "$SLUG"

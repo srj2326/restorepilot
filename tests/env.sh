@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # Shared test environment for the shell runners. Sourced, not executed.
 #
 # RP-008. The runners used to hard-code one machine's PHP binary, MySQL socket,
@@ -7,7 +7,14 @@
 # tests/config.local.php, then a default -- so the shell and the PHP tests can
 # never disagree about which site is about to be restored over.
 
-RP_TESTS_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
+# A sourced file cannot portably locate itself: zsh spells it ${(%):-%x} and
+# bash ${BASH_SOURCE[0]}, and the zsh form is not even valid bash. Both callers
+# work out their own directory before sourcing this, so take theirs.
+RP_TESTS_DIR="${RP_TESTS_DIR:-$S}"
+if [[ -z "$RP_TESTS_DIR" || ! -f "$RP_TESTS_DIR/env_dump.php" ]]; then
+  echo "env.sh: source this from a script that sets S to the tests directory" >&2
+  exit 2
+fi
 
 # env.php refuses an unmarked or missing fixture and explains how to set one up;
 # let that message reach the user rather than failing later and less clearly.

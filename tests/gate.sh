@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # The fast checks, meant to run before every commit rather than every release.
 #
 # Each one encodes something that must never be wrong, and each was written
@@ -184,7 +184,9 @@ fi
 
 "$PHP_BIN" -d "mysqli.default_socket=$SOCK" "$S/reset_site_state.php" >/dev/null 2>&1
 
-for t in $FAST_TESTS; do
+# "${FAST_TESTS[@]}", not $FAST_TESTS: under bash the bare name expands to the
+# first element only, so the gate would run one test and report itself green.
+for t in "${FAST_TESTS[@]}"; do
   [ -f "$S/$t.php" ] || continue
   out=$("$PHP_BIN" -d "mysqli.default_socket=$SOCK" -d "memory_limit=512M" "$S/$t.php" 2>&1)
   code=$?

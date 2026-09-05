@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # A test is a pass only if it exits 0 AND prints no failure line AND actually
 # reports finishing. Exit code alone let a test that printed "3 FAILURE(S)"
 # and then ended normally be recorded as a pass.
