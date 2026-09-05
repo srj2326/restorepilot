@@ -1,0 +1,277 @@
+# RestorePilot CI
+#
+# RP-008. Written to match the checks that already gate a commit locally, so
+# the two cannot drift: lint, the release package allowlist, and the test
+# suite. The suite refuses any WordPress that is not marked disposable, which
+# is why every job that runs it creates its own throwaway install and marks it.
+#
+# Honesty note for whoever reads this first: the lint and package jobs mirror
+# commands that are run locally on every commit. The jobs that stand up
+# WordPress have never been executed -- this file has not run on GitHub yet, and
+# nothing here should be treated as green until it has. They are marked
+# continue-on-error until that first real run, so a job that needs adjusting
+# cannot masquerade as a passing gate.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Does it parse on every PHP the plugin claims to support? ─────────────
+  lint:
+    name: Lint (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # "Requires PHP: 7.4" in the plugin header is a promise; the top of the
+        # range is what hosts actually run.
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Syntax check every PHP file that ships
+        run: |
+          set -e
+          fail=0
+          for f in restorepilot-backup-migration.php uninstall.php includes/*.php; do
+            php -l "$f" > /dev/null || { echo "FAIL $f"; fail=1; }
+          done
+          exit $fail
+
+      # A deprecation on a version the header promises is a bug in the promise.
+      - name: Report deprecations
+        run: |
+          for f in restorepilot-backup-migration.php uninstall.php includes/*.php; do
+            php -d error_reporting=E_ALL -l "$f" 2>&1 | grep -i deprecat && exit 1
+          done
+          echo "no deprecations on PHP ${{ matrix.php }}"
+
+  # ── Does the JavaScript parse? ───────────────────────────────────────────
+  lint-js:
+    name: Lint (JavaScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: for f in assets/js/*.js; do node --check "$f"; done
+
+  # ── Does the release artifact contain only what may ship? ────────────────
+  package:
+    name: Release package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      # build.sh asserts the allowlist itself: no tests, no build tooling, no
+      # audit reports, every require resolving inside the package, versions
+      # agreeing, a changelog entry present. The zip it produces is what
+      # WordPress.org would serve.
+      - name: Build and assert the package
+        run: |
+          chmod +x build.sh
+          PHP_BIN=$(which php) ./build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: restorepilot-backup-migration
+          path: dist/*.zip
+          if-no-files-found: error
+
+  # ── Does that exact zip install and activate on a clean WordPress? ───────
+  smoke:
+    name: Clean-install activation
+    runs-on: ubuntu-latest
+    needs: package
+    continue-on-error: true   # never run; see the note at the top of this file
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli, zip, gd
+          coverage: none
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: restorepilot-backup-migration
+          path: dist
+
+      - name: Install WP-CLI
+        run: |
+          curl -sSLo wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp && sudo mv wp /usr/local/bin/wp
+          wp --info
+
+      - name: Stand up a throwaway WordPress
+        run: |
+          mkdir -p /tmp/wp && cd /tmp/wp
+          wp core download --version=latest
+          wp config create --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1
+          wp core install --url=http://localhost --title=CI \
+            --admin_user=admin --admin_email=ci@example.com --skip-email
+
+      # The activation itself is the test: a fatal on load fails here.
+      - name: Install and activate the built zip
+        run: |
+          cd /tmp/wp
+          wp plugin install "$GITHUB_WORKSPACE"/dist/*.zip --activate
+          wp plugin list --status=active --field=name | grep restorepilot
+
+      - name: No PHP errors on an admin request
+        run: |
+          cd /tmp/wp
+          wp eval 'echo class_exists("RestorePilot_Backup_Migration") ? "class loaded\n" : exit(1);'
+          wp cron event list --fields=hook | grep -i restorepilot || echo "no cron events yet, which is expected before first use"
+
+  # ── WordPress.org's own checks, which now run on every update ────────────
+  plugin-check:
+    name: Plugin Check
+    runs-on: ubuntu-latest
+    needs: package
+    continue-on-error: true   # never run; see the note at the top of this file
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli, zip
+          coverage: none
+      - uses: actions/download-artifact@v4
+        with:
+          name: restorepilot-backup-migration
+          path: dist
+      - name: Install WP-CLI
+        run: |
+          curl -sSLo wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp && sudo mv wp /usr/local/bin/wp
+      - name: Stand up WordPress and run Plugin Check
+        run: |
+          mkdir -p /tmp/wp && cd /tmp/wp
+          wp core download --version=latest
+          wp config create --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1
+          wp core install --url=http://localhost --title=CI \
+            --admin_user=admin --admin_email=ci@example.com --skip-email
+          wp plugin install plugin-check --activate
+          wp plugin install "$GITHUB_WORKSPACE"/dist/*.zip
+          wp plugin check restorepilot-backup-migration --format=table
+
+  # ── Coding standards, reported rather than enforced, for now ─────────────
+  standards:
+    name: WordPress coding standards
+    runs-on: ubuntu-latest
+    continue-on-error: true   # the traits carry known unsuppressed warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer, cs2pr
+          coverage: none
+      - name: Install PHPCS and the WordPress standards
+        run: |
+          composer global require --no-interaction --no-progress \
+            squizlabs/php_codesniffer dealerdirect/phpcodesniffer-composer-installer \
+            wp-coding-standards/wpcs:^3
+          echo "$HOME/.composer/vendor/bin" >> "$GITHUB_PATH"
+      - name: Report against WordPress-Extra
+        run: |
+          phpcs --standard=WordPress-Extra --extensions=php \
+            --ignore=tests/*,dist/* --report=summary . || true
+
+  # ── The real suite, against a WordPress this job creates and marks ───────
+  integration:
+    name: Integration suite
+    runs-on: ubuntu-latest
+    continue-on-error: true   # never run; see the note at the top of this file
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mysqli, zip, gd
+          coverage: none
+
+      - name: Install WP-CLI
+        run: |
+          curl -sSLo wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp && sudo mv wp /usr/local/bin/wp
+
+      - name: Stand up the fixture and mark it disposable
+        run: |
+          mkdir -p /tmp/wp && cd /tmp/wp
+          wp core download --version=latest
+          wp config create --dbname=wordpress --dbuser=root --dbpass=root --dbhost=127.0.0.1
+          wp core install --url=http://localhost --title=Fixture \
+            --admin_user=admin --admin_email=ci@example.com --skip-email
+          # The suite will not touch a site without this, by design.
+          echo "CI fixture, destroyed with the runner." > /tmp/wp/.restorepilot-disposable
+          mkdir -p /tmp/wp/wp-content/plugins/restorepilot-backup-migration
+          cp -R "$GITHUB_WORKSPACE"/plugin/. /tmp/wp/wp-content/plugins/restorepilot-backup-migration/
+          wp plugin activate restorepilot-backup-migration
+
+      - name: Run the gate
+        env:
+          RP_TEST_SITE: /tmp/wp
+          RP_TEST_PHP: php
+          # TCP rather than a socket here; env.php passes this straight to the
+          # child processes, so this is the piece most likely to need work on
+          # the first real run.
+          RP_TEST_MYSQL_SOCKET: ''
+        run: |
+          cd "$GITHUB_WORKSPACE/plugin"
+          chmod +x tests/gate.sh build.sh
+          ./tests/gate.sh
