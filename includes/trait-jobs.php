@@ -441,6 +441,7 @@ trait RestorePilot_Jobs {
     $like = self::like_prefix_literal('restorepilot_backup_job_');
     $like2 = self::like_prefix_literal(self::RESTORE_JOB_PREFIX);
     $table = $wpdb->options;
+    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is $wpdb->options; $like/$like2 come from like_prefix_literal(), which quotes and escapes a hardcoded plugin prefix. No request input reaches this query.
     $rows = $wpdb->get_results("SELECT option_name, option_value FROM `$table` WHERE option_name LIKE $like OR option_name LIKE $like2");
     if (!is_array($rows)) {
       return;

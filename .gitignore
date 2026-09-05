@@ -7,3 +7,7 @@ CODEX-*.md
 
 # Local test environment (paths differ per machine)
 tests/config.local.php
+
+# Composer dev tooling (PHPCS/WPCS); nothing here ships
+/vendor/
+composer.lock

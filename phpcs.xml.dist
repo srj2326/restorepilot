@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<ruleset name="RestorePilot">
+  <description>
+    WordPress coding standards, minus the formatting rules this codebase
+    deliberately does not follow, so that what remains is worth reading.
+
+    RP-008/RP-032. Run bare, WordPress-Extra reports about 43,000 violations
+    here, of which roughly 42,000 are whitespace: this plugin indents with two
+    spaces and uses short array syntax, and WPCS wants tabs and long arrays.
+    Neither is a defect, and a report where the real findings sit under
+    thirty-five thousand indentation notices is a report nobody reads — which
+    is how three file-wide phpcs:disable lines survived for months without
+    anyone noticing they had stopped applying to anything.
+
+    So the style sniffs are excluded by name, with the count each was
+    contributing, and what is left is correctness and security. Those are
+    expected to stay at zero.
+  </description>
+
+  <file>.</file>
+  <exclude-pattern>/dist/*</exclude-pattern>
+  <exclude-pattern>/tests/*</exclude-pattern>
+  <exclude-pattern>/vendor/*</exclude-pattern>
+  <exclude-pattern>/node_modules/*</exclude-pattern>
+
+  <arg name="extensions" value="php"/>
+  <arg name="colors"/>
+  <arg value="ps"/>
+
+  <config name="minimum_wp_version" value="6.2"/>
+  <config name="testVersion" value="7.4-"/>
+
+  <rule ref="WordPress-Extra">
+    <!-- Indentation and whitespace: two spaces, not tabs. ~30,000 findings. -->
+    <exclude name="Generic.WhiteSpace.DisallowSpaceIndent"/>
+    <exclude name="Generic.WhiteSpace.ScopeIndent"/>
+    <exclude name="Universal.WhiteSpace.PrecisionAlignment"/>
+    <exclude name="Generic.WhiteSpace.ArbitraryParenthesesSpacing"/>
+    <exclude name="WordPress.WhiteSpace.ControlStructureSpacing"/>
+    <exclude name="WordPress.WhiteSpace.OperatorSpacing"/>
+    <exclude name="WordPress.WhiteSpace.CastStructureSpacing"/>
+    <exclude name="PEAR.Functions.FunctionCallSignature"/>
+    <exclude name="Squiz.Functions.MultiLineFunctionDeclaration"/>
+    <exclude name="Squiz.ControlStructures.ControlSignature"/>
+    <exclude name="Generic.Formatting.MultipleStatementAlignment"/>
+    <!-- Padding after a comma is used to align columns that are read as
+         columns: the URL search/replace pairs, the hook table. phpcbf
+         "fixes" these by collapsing the alignment, which makes them harder
+         to read, so the sniff is excluded rather than obeyed. -->
+    <exclude name="Generic.Functions.FunctionCallArgumentSpacing"/>
+    <exclude name="Universal.WhiteSpace.CommaSpacing"/>
+    <exclude name="NormalizedArrays.Arrays.CommaAfterLast"/>
+
+    <!-- Short array syntax is used throughout on purpose. ~1,500 findings. -->
+    <exclude name="Universal.Arrays.DisallowShortArraySyntax"/>
+    <exclude name="WordPress.Arrays.ArrayIndentation"/>
+    <exclude name="WordPress.Arrays.MultipleStatementAlignment"/>
+    <exclude name="WordPress.Arrays.ArrayKeySpacingRestrictions"/>
+    <exclude name="WordPress.Arrays.ArrayDeclarationSpacing"/>
+    <exclude name="NormalizedArrays.Arrays.ArrayBraceSpacing"/>
+
+    <!-- Expression style, not correctness. -->
+    <exclude name="WordPress.PHP.YodaConditions"/>
+    <exclude name="Universal.Operators.DisallowShortTernary"/>
+    <exclude name="Universal.Operators.DisallowStandalonePostIncrementDecrement"/>
+
+    <!-- File and symbol naming. The class/trait split predates this ruleset
+         and renaming eighteen files to satisfy a naming sniff would be a
+         large diff for no behavioural gain. -->
+    <exclude name="WordPress.Files.FileName"/>
+    <exclude name="Generic.Files.OneObjectStructurePerFile"/>
+    <exclude name="WordPress.NamingConventions.ValidFunctionName"/>
+    <exclude name="WordPress.NamingConventions.ValidVariableName"/>
+
+    <!-- Documentation blocks: this codebase comments heavily but does not use
+         @param/@return tags on every private helper. -->
+    <exclude name="Squiz.Commenting"/>
+    <exclude name="Generic.Commenting"/>
+    <exclude name="Squiz.Functions.FunctionDeclarationArgumentSpacing"/>
+    <exclude name="Squiz.Strings.ConcatenationSpacing"/>
+    <exclude name="Squiz.PHP.EmbeddedPhp"/>
+    <exclude name="PSR2.ControlStructures.SwitchDeclaration"/>
+    <exclude name="PSR2.Classes.ClassDeclaration"/>
+    <exclude name="PSR2.Files.EndFileNewline"/>
+    <exclude name="Generic.Formatting.DisallowMultipleStatements"/>
+    <exclude name="Universal.ControlStructures.DisallowLonelyIf"/>
+
+    <!-- Exception messages. 154 findings, every one of them a throw site, not
+         an output site: WPCS flags `throw new RuntimeException(__('...'))`
+         because an exception message *could* reach the page unescaped.
+         Checked rather than assumed: no getMessage() is echoed anywhere in
+         this plugin, caught messages go to write_log() and to
+         wp_send_json_error() which JSON-encodes them, and every throw takes a
+         literal or a sprintf of the plugin's own translated strings — none
+         carries request input. -->
+    <exclude name="WordPress.Security.EscapeOutput.ExceptionNotEscaped"/>
+
+    <!-- Silenced filesystem and environment calls. 112 of them, and the
+         pattern was checked rather than assumed: everything load-bearing tests
+         its return value and throws or bails (every fopen for a zip or a
+         journal, every file_put_contents that stores real content). The ones
+         that ignore the result are auxiliary by design — a log line, the
+         status mirror a poller reads, the operation notice — where a failed
+         write must not take down the backup it was describing. -->
+    <exclude name="WordPress.PHP.NoSilencedErrors"/>
+
+    <!-- Filesystem calls. WPCS prefers WP_Filesystem, which cannot stream: it
+         reads whole files into memory and has no equivalent of fopen/fread/
+         fwrite on a handle. A plugin whose job is writing multi-gigabyte zips
+         a chunk at a time cannot use it. Every call site here operates on a
+         plugin-owned path validated before use. -->
+    <exclude name="WordPress.WP.AlternativeFunctions"/>
+  </rule>
+
+  <rule ref="WordPress-Extra">
+    <!-- Idiomatic constructs this codebase uses on purpose, each checked
+         before being excused:
+           ForLoopWithTestFunctionCall  — the call is num_files(), which is
+             count() on an array and therefore O(1);
+           DisallowSizeFunctionsInLoops — likewise count() on a plain array;
+           AssignmentInCondition        — while (($line = fgets($h)) !== false),
+             the standard streaming read this plugin is built on;
+           NoReservedKeywordParameterNames — $default and $fn are legal
+             parameter names and read better than the alternatives. -->
+    <exclude name="Generic.CodeAnalysis.ForLoopWithTestFunctionCall"/>
+    <exclude name="Squiz.PHP.DisallowSizeFunctionsInLoops"/>
+    <exclude name="Generic.CodeAnalysis.AssignmentInCondition"/>
+    <exclude name="Universal.NamingConventions.NoReservedKeywordParameterNames"/>
+  </rule>
+
+  <!-- unserialize() on archive content is unavoidable when the job is
+       rewriting URLs inside serialized options. It is called with
+       allowed_classes => false, so a crafted payload decodes to
+       __PHP_Incomplete_Class and is preserved byte for byte rather than
+       instantiated. See the comment at the call site. -->
+  <rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize">
+    <exclude-pattern>/includes/trait-migration.php</exclude-pattern>
+  </rule>
+
+  <!-- WP-CLI hands every command ($args, $assoc_args); a command that needs
+       only the first still has to accept both. -->
+  <rule ref="Generic.CodeAnalysis.UnusedFunctionParameter">
+    <exclude-pattern>/includes/trait-request-handlers.php</exclude-pattern>
+  </rule>
+
+  <!-- A backup plugin reads and writes files and runs schema statements the
+       WordPress API has no equivalent for. These stay enabled: every real call
+       site carries its own phpcs:ignore explaining why, which is the point. -->
+</ruleset>

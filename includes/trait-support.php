@@ -109,8 +109,10 @@ trait RestorePilot_Support {
       $table = $wpdb->options;
       foreach ($patterns as $pattern) {
         if ($pattern['except'] !== '') {
+          // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is $wpdb->options; 'like' is a quoted literal from like_prefix_literal() over a hardcoded prefix; 'except' is an internally generated option name run through esc_sql().
           $wpdb->query("DELETE FROM `$table` WHERE option_name LIKE {$pattern['like']} AND option_name != '" . esc_sql($pattern['except']) . "'");
         } else {
+          // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- as above: options table, hardcoded prefix, no request input.
           $wpdb->query("DELETE FROM `$table` WHERE option_name LIKE {$pattern['like']}");
         }
       }

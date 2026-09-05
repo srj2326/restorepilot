@@ -812,18 +812,30 @@ trait RestorePilot_Backup {
             ]);
             $wpdb->last_error = '';
             if ($last_seen === null) {
-              // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $order_by is a generated list of literal "%i ASC" placeholders; all identifiers and values are bound below.
+              // $order_by is a generated list of literal "%i ASC" placeholders; the
+              // table name and every value are bound through the array form of
+              // prepare(). disable/enable rather than ignore because the statement
+              // spans lines and phpcs:ignore reaches only the next one.
+              // ReplacementsWrongNumber is a false positive here: PHPCS counts the
+              // array as a single replacement. Checked against MySQL, which binds
+              // each element and emits `wp_posts` ORDER BY `ID` ASC.
+          // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
               $sql = $wpdb->prepare(
                 "SELECT * FROM %i ORDER BY {$order_by} LIMIT %d",
                 array_merge([$table], $pk_columns, [$limit])
               );
+          // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
             } else {
-              // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $tuple/$value_tuple/$order_by are generated lists of literal %i and %s placeholders; all identifiers and values are bound below.
+              // As above: $tuple/$value_tuple/$order_by are generated lists of
+              // literal %i and %s placeholders, every identifier and value bound.
+          // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
               $sql = $wpdb->prepare(
                 "SELECT * FROM %i WHERE {$tuple} > {$value_tuple} ORDER BY {$order_by} LIMIT %d",
                 array_merge([$table], $pk_columns, $last_seen, $pk_columns, [$limit])
               );
+          // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
             }
+            // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql is the string prepare() returned immediately above.
             $batch = $wpdb->get_results($sql, ARRAY_A);
             self::throw_on_db_error('export table rows');
 

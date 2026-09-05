@@ -36,6 +36,27 @@ package_check() {
   return 0
 }
 
+# Coding standards, when the tooling is present. Installed with
+# `composer install`, which is optional for a contributor who only wants to run
+# the tests -- so a missing vendor/ is a skip, not a failure. The ruleset in
+# phpcs.xml.dist is tuned to this codebase and its baseline is zero, which is
+# what makes it worth gating on: anything it reports is new.
+standards_check() {
+  local bin="$PLUGIN_DIR/vendor/bin/phpcs"
+  if [[ ! -x "$bin" ]]; then
+    echo "SKIP  coding standards (run 'composer install' to enable)"
+    return 0
+  fi
+  local out
+  if ! out=$("$bin" -q --report=summary --no-colors --basepath="$PLUGIN_DIR" 2>&1); then
+    echo "FAIL  coding standards"
+    echo "$out" | tail -15
+    return 1
+  fi
+  echo "PASS  coding standards (WordPress-Extra, project ruleset)"
+  return 0
+}
+
 FAST_TESTS=(
   test_plugin_paths        # the plugin knows which directory is its own
   test_fresh_job_read      # the post-lock re-read reaches the database
@@ -146,6 +167,7 @@ printf("PASS  all %d require paths resolve (case-sensitive)\n", count($m[1]));
 
 # --- 5. The release package -----------------------------------------------
 package_check || fail=1
+standards_check || fail=1
 
 # --- 6. The fast behavioural tests ----------------------------------------
 # Run against the test site, so it gets the code being committed first.

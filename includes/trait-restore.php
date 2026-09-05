@@ -983,7 +983,7 @@ trait RestorePilot_Restore {
       }
 
       $wpdb->last_error = '';
-      // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $rename_pairs is a generated list of literal "%i TO %i" placeholder pairs; every table name is bound via $rename_args below.
+      // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $rename_pairs is a generated list of literal "%i TO %i" placeholder pairs; every table name is bound via $rename_args below. PHPCS cannot see placeholders that arrive through implode(), so it reports the replacements as unmatched.
       $wpdb->query($wpdb->prepare('RENAME TABLE ' . implode(', ', $rename_pairs), $rename_args));
       self::throw_on_db_error('swap restored database tables');
 

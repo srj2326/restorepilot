@@ -196,28 +196,27 @@ jobs:
           wp plugin install "$GITHUB_WORKSPACE"/dist/*.zip
           wp plugin check restorepilot-backup-migration --format=table
 
-  # ── Coding standards, reported rather than enforced, for now ─────────────
+  # ── Coding standards, enforced ───────────────────────────────────────────
+  # Not advisory. phpcs.xml.dist is WordPress-Extra with the formatting rules
+  # this codebase deliberately does not follow excluded by name, each with the
+  # count it was contributing and the reason. What is left is correctness and
+  # security, and its baseline is zero — verified locally, including a canary
+  # commit carrying an unsanitised $_GET interpolated into a DELETE, which it
+  # caught. Anything this job reports is therefore new.
   standards:
     name: WordPress coding standards
     runs-on: ubuntu-latest
-    continue-on-error: true   # the traits carry known unsuppressed warnings
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          tools: composer, cs2pr
+          tools: composer
           coverage: none
-      - name: Install PHPCS and the WordPress standards
-        run: |
-          composer global require --no-interaction --no-progress \
-            squizlabs/php_codesniffer dealerdirect/phpcodesniffer-composer-installer \
-            wp-coding-standards/wpcs:^3
-          echo "$HOME/.composer/vendor/bin" >> "$GITHUB_PATH"
-      - name: Report against WordPress-Extra
-        run: |
-          phpcs --standard=WordPress-Extra --extensions=php \
-            --ignore=tests/*,dist/* --report=summary . || true
+      - name: Install the pinned PHPCS and WPCS
+        run: composer install --no-interaction --no-progress
+      - name: Check against the project ruleset
+        run: ./vendor/bin/phpcs --report=full --no-colors
 
   # ── The real suite, against a WordPress this job creates and marks ───────
   integration:

@@ -730,11 +730,15 @@ trait RestorePilot_Database {
 
     $wpdb = self::wpdb();
     $wpdb->last_error = '';
-    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table name is a scratch name this restore generated; every value is bound.
+    // The table name is a scratch name this restore generated, backtick-escaped
+    // above; every value is bound through $values. The %s placeholders arrive
+    // via implode(), which PHPCS cannot see, so it reports them as unmatched.
+    // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
     $found = $wpdb->get_var($wpdb->prepare(
       'SELECT COUNT(*) FROM `' . str_replace('`', '``', $table) . '` WHERE ' . implode(' AND ', $where),
       $values
     ));
+    // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 
     // A dropped table answers with an error, not a count -- which is the other
     // half of the failure this exists for, and emphatically not a reason to

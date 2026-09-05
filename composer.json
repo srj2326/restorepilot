@@ -1,0 +1,23 @@
+{
+  "name": "srjdev/restorepilot-backup-migration",
+  "description": "Back up, restore, and migrate WordPress sites with serialized-safe URL replacement.",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=7.4"
+  },
+  "require-dev": {
+    "squizlabs/php_codesniffer": "^3.13",
+    "wp-coding-standards/wpcs": "^3.4",
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.2"
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  },
+  "scripts": {
+    "lint": "phpcs",
+    "lint:fix": "phpcbf"
+  }
+}

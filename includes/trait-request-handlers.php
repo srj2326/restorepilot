@@ -751,6 +751,7 @@ trait RestorePilot_RequestHandlers {
       // clear the very locks it claims to.
       $table = $wpdb->options;
       foreach ([self::BACKUP_WORKER_LOCK_PREFIX, self::RESTORE_WORKER_LOCK_PREFIX] as $prefix) {
+        // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- $table is $wpdb->options; $prefix is one of this plugin's own *_LOCK_PREFIX constants, quoted and escaped by like_prefix_literal().
         $wpdb->query("DELETE FROM `$table` WHERE option_name LIKE " . self::like_prefix_literal($prefix));
       }
     }
@@ -910,11 +911,14 @@ trait RestorePilot_RequestHandlers {
     // name is bound too, via the %i identifier placeholder.
     $keep_placeholders = implode(', ', array_fill(0, count($keep_options), '%s'));
     $wpdb->last_error = '';
-    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $keep_placeholders is a generated list of %s placeholders; the table name and all values are bound below.
+    // $keep_placeholders is a generated list of %s placeholders; the table name
+    // and every value are bound. Spans lines, so disable/enable.
+    // phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     $wpdb->query($wpdb->prepare(
       "DELETE FROM %i WHERE option_name NOT IN ({$keep_placeholders})",
       array_merge([$wpdb->options], $keep_options)
     ));
+    // phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
     if ($wpdb->last_error !== '') {
       $reset_problems[] = 'could not clear site options: ' . $wpdb->last_error;
     }

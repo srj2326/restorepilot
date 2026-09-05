@@ -28,6 +28,7 @@
 /package-lock.json
 /phpunit.xml
 /phpcs.xml
+/phpcs.xml.dist
 /.editorconfig
 
 # The regression suite. Never ship this: see build.sh, which fails the build
