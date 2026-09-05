@@ -619,7 +619,7 @@ trait RestorePilot_RequestHandlers {
 
     // Read raw: a password is not text to be sanitized, and running it
     // through a sanitizer would silently change what the operator typed.
-    // phpcs:ignore WordPress.Security.NonceVerification.Missing -- authorized above via poll_token or nonce+capability.
+    // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- authorized above via poll_token or nonce+capability; a password must not be sanitized, only unslashed, or the sanitizer silently changes what was typed. Length is validated immediately below and the value is passed straight to wp_set_password().
     $password = isset($_POST['new_password']) ? (string) wp_unslash($_POST['new_password']) : '';
     if ($password === '' || strlen($password) < 8) {
       wp_send_json_error(['message' => __('Choose a password of at least 8 characters.', 'restorepilot-backup-migration')], 400);

@@ -362,7 +362,7 @@ RestorePilot stops immediately, removes maintenance mode, and writes the full er
 == Upgrade Notice ==
 
 = 0.5.0 =
-Removes the size limits on backup and restore: backups are split into volumes, the database is streamed, and both a background backup and a background restore now resume automatically if the host interrupts them, so neither file size, PHP memory, nor a host timeout caps the site size. Keep all volumes of a backup together. Includes a security fix for crafted archives. Requires WordPress 6.2+.
+Removes the size limits on backup and restore: backups split into volumes, the database is streamed, and background jobs resume after a host timeout. Keep all volumes of a backup together. Includes a security fix for crafted archives. Requires WordPress 6.2+.
 
 = 0.3.1 =
 Important fix: selected-folder backups now preserve plugin folder paths, so backup plugin code is included while backup archives remain excluded. Also cleans missing active plugin references after restore.

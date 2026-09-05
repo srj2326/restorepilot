@@ -118,9 +118,25 @@ check('The sync fallback points at password reset instead of printing one',
     strpos($src, 'Lost your password?') !== false);
 
 // Endpoint hardening still in place.
-$ep = substr($src, strpos($src, 'public static function handle_set_restore_admin_password'), 4000);
+// Sliced to the end of the function rather than a fixed number of characters.
+// It was 4000, and adding a phpcs:ignore comment inside the function pushed
+// wp_set_password() past the window: strpos() then returned false, the
+// ordering comparison quietly became "int < false", and a correct endpoint
+// failed the check.
+$ep_start = strpos($src, 'public static function handle_set_restore_admin_password');
+$ep_next  = strpos($src, "\n  public static function ", $ep_start + 10);
+$ep = $ep_next === false ? substr($src, $ep_start) : substr($src, $ep_start, $ep_next - $ep_start);
+
 check('Endpoint still requires the restore to be complete', strpos($ep, "!== 'complete'") !== false);
-check('Endpoint still consumes the pointer before applying', strpos($ep, "'new_admin_user_id' => 0") < strpos($ep, 'wp_set_password'));
+
+$consume_at = strpos($ep, "'new_admin_user_id' => 0");
+// The call, not the name: a phpcs:ignore comment above it mentions
+// wp_set_password() in prose, and matching the bare name found the comment
+// first — putting "apply" before "consume" and failing correct code.
+$apply_at   = strpos($ep, 'wp_set_password($password,');
+check('Endpoint still consumes the pointer before applying',
+    $consume_at !== false && $apply_at !== false && $consume_at < $apply_at,
+    sprintf('consume at %s, apply at %s', var_export($consume_at, true), var_export($apply_at, true)));
 check('Endpoint still compares tokens with hash_equals', strpos($ep, 'hash_equals') !== false);
 
 // Cleanup.

@@ -139,6 +139,15 @@
     <exclude name="Universal.NamingConventions.NoReservedKeywordParameterNames"/>
   </rule>
 
+  <!-- WordPress-Extra pulls in only four of the Security sniffs: EscapeOutput,
+       SafeRedirect, NonceVerification and PluginMenuSlug. It does NOT include
+       ValidatedSanitizedInput, so "zero security findings" here meant zero
+       findings from the sniffs that happened to be running. WordPress.org's
+       own Plugin Check does run it, found a case this did not, and that gap is
+       the sort a ruleset is supposed to close rather than create. Registered
+       explicitly. -->
+  <rule ref="WordPress.Security.ValidatedSanitizedInput"/>
+
   <!-- unserialize() on archive content is unavoidable when the job is
        rewriting URLs inside serialized options. It is called with
        allowed_classes => false, so a crafted payload decodes to

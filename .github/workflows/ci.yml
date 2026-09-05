@@ -5,12 +5,15 @@
 # suite. The suite refuses any WordPress that is not marked disposable, which
 # is why every job that runs it creates its own throwaway install and marks it.
 #
-# Honesty note for whoever reads this first: the lint and package jobs mirror
-# commands that are run locally on every commit. The jobs that stand up
-# WordPress have never been executed -- this file has not run on GitHub yet, and
-# nothing here should be treated as green until it has. They are marked
-# continue-on-error until that first real run, so a job that needs adjusting
-# cannot masquerade as a passing gate.
+# Every job here has now run on GitHub and passed, so none of them is advisory.
+# The first three runs each found something real: zsh shebangs no runner has,
+# a bare array expansion that staged one file and called it a package, an
+# invalid fallback email on any host without a dot in it, and two tests that
+# only worked on the author's machine. That is what this exists for.
+#
+# One thing worth keeping in mind when editing: `wp plugin check` exits 0 even
+# when it reports errors, so the Plugin Check job asserts on its output rather
+# than its exit code.
 
 name: CI
 
@@ -129,7 +132,6 @@ jobs:
     name: Clean-install activation
     runs-on: ubuntu-latest
     needs: package
-    continue-on-error: true   # never run; see the note at the top of this file
     services:
       mysql:
         image: mysql:8.0
@@ -186,7 +188,6 @@ jobs:
     name: Plugin Check
     runs-on: ubuntu-latest
     needs: package
-    continue-on-error: true   # never run; see the note at the top of this file
     services:
       mysql:
         image: mysql:8.0
@@ -221,7 +222,26 @@ jobs:
             --admin_user=admin --admin_email=ci@example.com --skip-email
           wp plugin install plugin-check --activate
           wp plugin install "$GITHUB_WORKSPACE"/dist/*.zip
-          wp plugin check restorepilot-backup-migration --format=table
+          wp plugin check restorepilot-backup-migration --format=table | tee /tmp/plugin-check.txt
+
+      # `wp plugin check` exits 0 even when it reports errors, so the job passed
+      # while Plugin Check was reporting 300+ of them. A green tick that means
+      # "the command ran" is worse than no tick at all.
+      #
+      # The two categories below are the ones reviewed and documented in
+      # phpcs.xml.dist: filesystem calls a streaming backup cannot make through
+      # WP_Filesystem, and exception messages that are thrown rather than
+      # echoed. Anything else is new and fails the job.
+      - name: Fail on Plugin Check findings that are not already accounted for
+        run: |
+          accounted='WordPress.WP.AlternativeFunctions|WordPress.Security.EscapeOutput.ExceptionNotEscaped'
+          unexpected=$(awk -F'\t' '$3 == "ERROR"' /tmp/plugin-check.txt | grep -Ev "$accounted" || true)
+          if [ -n "$unexpected" ]; then
+            echo "Plugin Check reported errors outside the documented exceptions:"
+            echo "$unexpected"
+            exit 1
+          fi
+          echo "no unaccounted-for Plugin Check errors"
 
   # ── Coding standards, enforced ───────────────────────────────────────────
   # Not advisory. phpcs.xml.dist is WordPress-Extra with the formatting rules
@@ -249,7 +269,6 @@ jobs:
   integration:
     name: Integration suite
     runs-on: ubuntu-latest
-    continue-on-error: true   # never run; see the note at the top of this file
     services:
       mysql:
         image: mysql:8.0
