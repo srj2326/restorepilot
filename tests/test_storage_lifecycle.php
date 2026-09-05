@@ -161,7 +161,22 @@ check('THE LIMIT: the sibling directory beside it is untouched',
 // so this checks the decision rather than the helper.
 $src = file_get_contents(dirname(__DIR__) . '/includes/trait-request-handlers.php');
 check('Storage is purged only when the operator asked for it',
-    preg_match('/if \(\$purge_backups\) \{\s*\n\s*\$failed_storage = self::purge_plugin_storage\(\);/', $src) === 1);
+    preg_match('/if \(\$purge_backups\) \{\s*\n\s*\$failed_storage = self::purge_plugin_storage\(\$storage_targets\);/', $src) === 1);
+
+// The ordering this file did not check, and the bug it therefore missed.
+// Master Reset wipes wp_options at step 3, and the option recording where
+// storage was moved to is one of the ones it deletes. Resolving the locations
+// after that finds only the uploads directory, so every migrated backup
+// survived while the reset reported deleting them. Component tests could not
+// see it: purge_plugin_storage() works perfectly when called on its own.
+$resolve_at = strpos($src, '$storage_targets = $purge_backups ? self::plugin_owned_storage_dirs() : [];');
+$wipe_at    = strpos($src, 'DELETE FROM %i WHERE option_name NOT IN');
+$purge_at   = strpos($src, 'self::purge_plugin_storage($storage_targets);');
+check('THE FIX: the storage locations are resolved before wp_options is wiped',
+    $resolve_at !== false && $wipe_at !== false && $resolve_at < $wipe_at,
+    'after the wipe there is nothing left that knows where the backups went');
+check('And the purge itself still runs after the wipe, on what was resolved',
+    $purge_at !== false && $wipe_at !== false && $wipe_at < $purge_at);
 check('And a failure is named rather than reported as success',
     strpos($src, "'stored backups could not be deleted from ' . \$failed_dir") !== false
     && strpos($src, "only partly deleted; see the problems above.") !== false);

@@ -903,6 +903,16 @@ trait RestorePilot_RequestHandlers {
       }
     }
 
+    // Resolved BEFORE step 3, which deletes every option that is not on its
+    // keep-list -- and restorepilot_storage_path is one of the casualties. Once
+    // it is gone nothing knows where storage was moved to, so the purge in step
+    // 4 found only the uploads directory and left every migrated backup on
+    // disk, while the reset reported them deleted. That is the same ordering
+    // mistake as the one fixed in uninstall.php, in the other handler, and it
+    // shipped in 0.5.8 because the fix was only ever tested by calling the
+    // purge directly rather than by running Master Reset.
+    $storage_targets = $purge_backups ? self::plugin_owned_storage_dirs() : [];
+
     // 3. Reset wp_options — wipe everything except core WordPress identity/keys.
     // 'cron' is deliberately NOT kept: every other plugin is being deleted in
     // step 5 below, so any of their scheduled events still in 'cron' would be
@@ -991,7 +1001,7 @@ trait RestorePilot_RequestHandlers {
     // on the uploads directory being resolvable, and a site where it is not is
     // exactly where quietly skipping this would be worst.
     if ($purge_backups) {
-      $failed_storage = self::purge_plugin_storage();
+      $failed_storage = self::purge_plugin_storage($storage_targets);
       foreach ($failed_storage as $failed_dir) {
         $reset_problems[] = 'stored backups could not be deleted from ' . $failed_dir;
       }

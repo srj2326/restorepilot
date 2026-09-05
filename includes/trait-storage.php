@@ -1953,6 +1953,14 @@ trait RestorePilot_Storage {
    * cannot be deleted by either caller.
    */
   private static function plugin_owned_storage_dirs(): array {
+    // Repair a missing marker before deciding what we own, so a site that
+    // migrated under 0.5.7 is recognised. Was in purge_plugin_storage(), which
+    // is too late for a caller that resolves the list up front.
+    $recorded_marker = untrailingslashit((string) get_option(self::STORAGE_PATH_OPTION, ''));
+    if ($recorded_marker !== '') {
+      self::backfill_storage_marker($recorded_marker);
+    }
+
     $dirs = [];
 
     $upload = wp_upload_dir(null, false);
@@ -1978,18 +1986,20 @@ trait RestorePilot_Storage {
    * this exists to fix, where Master Reset reported backups deleted while the
    * migrated ones were still on disk.
    */
-  private static function purge_plugin_storage(): array {
-    // Self-healing rather than dependent on hook order: a site that migrated
-    // under 0.5.7 has no ownership marker, and without one this would decline
-    // to remove the very backups the operator asked it to remove. The backfill
-    // applies the same ownership test before writing anything.
-    $recorded = untrailingslashit((string) get_option(self::STORAGE_PATH_OPTION, ''));
-    if ($recorded !== '') {
-      self::backfill_storage_marker($recorded);
+  /**
+   * @param string[] $dirs Locations resolved earlier by the caller. Master
+   *                       Reset must resolve before it wipes wp_options,
+   *                       because the option recording where storage moved to
+   *                       is itself one of the options it deletes -- after
+   *                       which the private directory cannot be found at all.
+   */
+  private static function purge_plugin_storage(array $dirs = []): array {
+    if (!$dirs) {
+      $dirs = self::plugin_owned_storage_dirs();
     }
 
     $failed = [];
-    foreach (self::plugin_owned_storage_dirs() as $dir) {
+    foreach ($dirs as $dir) {
       // Confined to the directory's own parent: enough to delete this tree,
       // never enough to climb out of it.
       if (!self::delete_directory($dir, dirname($dir))) {
