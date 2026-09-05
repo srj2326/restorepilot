@@ -17,6 +17,24 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
+/*
+ * There is deliberately no duplicate-load sentinel here.
+ *
+ * One used to sit at the foot of this file, defining
+ * RESTOREPILOT_BACKUP_MIGRATION_LOADED after every require, declaration and
+ * hook registration had already run -- so it could not prevent a duplicate
+ * load, only record that one had happened. Moving it to the top does not fix
+ * it either: PHP binds unconditional top-level function declarations when it
+ * compiles the file, before the first statement executes, so a second include
+ * fatals on restorepilot_backup_migration_bootstrap() below without ever
+ * reaching a runtime guard. Verified rather than assumed.
+ *
+ * What actually guarantees a single load is the caller: wp-settings.php pulls
+ * plugins in with include_once (mu-plugins, network plugins and ordinary
+ * plugins alike), which is keyed on the resolved path. A guard here would only
+ * look like protection that is not there.
+ */
+
 // Behaviour lives in includes/: the helper classes, and the traits the
 // main class is assembled from. Loaded before the hooks below, which name
 // its methods.
@@ -65,21 +83,18 @@ if (!defined('RESTOREPILOT_BACKUP_MIGRATION_URL')) {
  * $wpdb->prepare()'s %i identifier placeholder, and every value through its
  * value placeholders; nothing is concatenated into a statement. The single
  * exception is the CREATE TABLE statement replayed during a restore, which is
- * schema DDL rather than bound values — it carries its own local
+ * schema DDL rather than bound values -- it carries its own local
  * phpcs:ignore and is whitelisted in full by assert_create_table_is_safe()
  * before execution.
  *
- * Each remaining file-wide disable below is for a category triggered at many
- * call sites throughout this file (backup/restore/export/import), not a
- * single reviewable spot; narrowing it to per-statement phpcs:ignore comments
- * needs an actual PHPCS/WPCS run to confirm complete coverage, which this
- * environment does not have available. Categories with few enough trigger
- * sites to audit and confirm by hand have been removed from this list rather
- * than left here unverified.
- *
- * phpcs:disable WordPress.WP.AlternativeFunctions -- fopen/fwrite/fclose-style streaming for backup zips, chunked uploads, and log files; used at dozens of sites, always on plugin-owned paths validated before use.
- * phpcs:disable WordPress.DB.DirectDatabaseQuery -- direct $wpdb queries for operations with no WordPress ORM equivalent (SHOW TABLES/CREATE TABLE, TRUNCATE, RENAME TABLE, raw SELECT for streamed export); all identifiers and values are bound via prepare().
- * phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- caught exception messages are plugin-generated (not raw user input) and are written to this plugin's own log, JSON API responses, or wp_die()/esc_html() output; not echoed as unescaped HTML.
+ * Three file-wide phpcs:disable lines used to sit here, saying they covered
+ * operations performed "throughout this file". That stopped being true when the
+ * behaviour moved into includes/: PHPCS directives apply only to the file they
+ * appear in, and this file no longer opens a stream, runs a query, or prints an
+ * exception message. They suppressed nothing, while reading as though the whole
+ * plugin had been granted a blanket exemption from here. The real call sites
+ * live in the traits and carry their own local phpcs:ignore comments, which is
+ * where an exception can be read next to the line it excuses.
  */
 
 function restorepilot_backup_migration_bootstrap(): void {
@@ -184,7 +199,3 @@ if (function_exists('register_deactivation_hook')) {
 }
 restorepilot_backup_migration_bootstrap();
 
-if (defined('RESTOREPILOT_BACKUP_MIGRATION_LOADED')) {
-  return;
-}
-define('RESTOREPILOT_BACKUP_MIGRATION_LOADED', true);
