@@ -687,6 +687,41 @@ trait RestorePilot_Storage {
     }
   }
 
+  /**
+   * A write whose failure the caller must be able to see.
+   *
+   * RP-038. The restore status mirror and the poll-token file are the only
+   * durable state that survives the database swap replacing wp_options
+   * mid-restore. Both were written with @file_put_contents() and no check, so
+   * a full disk, a permission change or a short write removed the restore's
+   * only checkpoint at exactly the moment it became irreplaceable, and said
+   * nothing.
+   *
+   * Writes to a temporary file and renames over the target: on POSIX a reader
+   * sees either the previous content or the new content, never a half-written
+   * record. A status poll reading a truncated JSON file mid-write would
+   * otherwise decode to nothing and look exactly like a job that had vanished.
+   */
+  private static function write_file_durable(string $path, string $contents): bool {
+    $dir = dirname($path);
+    if (!is_dir($dir) && !wp_mkdir_p($dir)) {
+      return false;
+    }
+
+    $tmp = $path . '.' . wp_generate_password(8, false, false) . '.tmp';
+    $written = @file_put_contents($tmp, $contents, LOCK_EX);
+    if ($written === false || $written !== strlen($contents)) {
+      @unlink($tmp);
+      return false;
+    }
+
+    if (!@rename($tmp, $path)) {
+      @unlink($tmp);
+      return false;
+    }
+    return true;
+  }
+
   private static function write_file(string $path, string $contents, string $context): void {
     $written = @file_put_contents($path, $contents, LOCK_EX);
     if ($written === false || $written !== strlen($contents)) {

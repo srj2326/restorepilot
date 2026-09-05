@@ -443,7 +443,7 @@ trait RestorePilot_RequestHandlers {
       // to job status and is validated server-side on every status request.
       $poll_token = wp_generate_password(32, false, false);
 
-      self::set_restore_job($job_id, [
+      $set_ok = self::set_restore_job($job_id, [
         'status' => 'queued',
         'phase' => 'queued',
         'phase_label' => self::restore_phase_label('queued'),
@@ -464,8 +464,20 @@ trait RestorePilot_RequestHandlers {
         'created' => time(),
         'updated' => time(),
       ]);
-      // Write poll_token to a file so it survives the DB restore replacing wp_options.
-      self::write_poll_token_file($job_id, $poll_token);
+      // RP-038. These two files are the restore's only durable state once the
+      // database swap replaces wp_options with the backup's own: the mirror
+      // carries the checkpoint and the worker token, the poll-token file
+      // authenticates every later status request and the post-restore password
+      // step. Both writes used to be silent, so a restore could begin with
+      // neither in place and only discover it after the swap, with no
+      // checkpoint to resume from and no way to authenticate a poll.
+      //
+      // Refusing here costs an error message. Refusing later costs an outage,
+      // so this is checked while nothing has been touched yet.
+      $mirrored = $set_ok && self::write_poll_token_file($job_id, $poll_token);
+      if (!$mirrored) {
+        throw new RuntimeException(__('Could not write the restore status files that let a restore be resumed and monitored. Check that the backup storage directory is writable and has free space, then try again.', 'restorepilot-backup-migration'));
+      }
 
       self::write_log('Background restore job queued: ' . $job_id);
       self::dispatch_restore_worker($job_id, $token);

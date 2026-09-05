@@ -22,8 +22,18 @@ trait RestorePilot_Jobs {
     return self::storage_dir() . '/poll-token-' . sanitize_file_name($job_id) . '.txt';
   }
 
-  private static function write_poll_token_file(string $job_id, string $poll_token): void {
-    @file_put_contents(self::poll_token_file($job_id), $poll_token);
+  /**
+   * Returns false when the token could not be stored. Callers before the
+   * database swap must treat that as fatal: this file is what authenticates
+   * every later status poll and the post-restore password step, once the
+   * option holding it has been replaced by the backup's own wp_options.
+   */
+  private static function write_poll_token_file(string $job_id, string $poll_token): bool {
+    if (!self::write_file_durable(self::poll_token_file($job_id), $poll_token)) {
+      self::write_log('Could not write the poll token file for job ' . $job_id);
+      return false;
+    }
+    return true;
   }
 
   private static function read_poll_token_file(string $job_id): string {
@@ -60,16 +70,33 @@ trait RestorePilot_Jobs {
    * of an already-restored database, or failing token auth outright so no
    * further resumption could ever run at all.
    */
-  private static function write_restore_status_file(string $job_id, array $job): void {
+  private static function write_restore_status_file(string $job_id, array $job): bool {
     if ($job_id === '') {
-      return;
+      return false;
     }
+
     try {
       self::ensure_storage();
-      @file_put_contents(self::restore_status_file($job_id), wp_json_encode($job));
     } catch (Throwable $e) {
-      return;
+      // Was swallowed entirely. Storage being unavailable is precisely the
+      // condition under which this mirror is about to be needed.
+      self::write_log('Restore status mirror unavailable for job ' . $job_id . ': ' . $e->getMessage());
+      return false;
     }
+
+    // wp_json_encode() returns false on malformed UTF-8 or recursion, and
+    // writing that produced an empty file that read back as a missing job.
+    $json = wp_json_encode($job);
+    if (!is_string($json) || $json === '') {
+      self::write_log('Restore status mirror could not be encoded for job ' . $job_id);
+      return false;
+    }
+
+    if (!self::write_file_durable(self::restore_status_file($job_id), $json)) {
+      self::write_log('Restore status mirror could not be written for job ' . $job_id);
+      return false;
+    }
+    return true;
   }
 
   private static function read_restore_status_file(string $job_id): array {
@@ -132,9 +159,10 @@ trait RestorePilot_Jobs {
     update_option(self::backup_job_option($job_id), $job, false);
   }
 
-  private static function set_restore_job(string $job_id, array $job): void {
+  /** False when the durable mirror could not be written; see RP-038. */
+  private static function set_restore_job(string $job_id, array $job): bool {
     update_option(self::restore_job_option($job_id), $job, false);
-    self::write_restore_status_file($job_id, $job);
+    return self::write_restore_status_file($job_id, $job);
   }
 
   /**
@@ -200,6 +228,12 @@ trait RestorePilot_Jobs {
       }
     }
     $job = array_merge($job, $updates, ['updated' => time()]);
+    // The return is deliberately not fatal here: by the time a restore is
+    // running, refusing to continue would strand it worse than carrying on.
+    // set_restore_job() writes a log line naming the job when the mirror fails,
+    // which is what turns "the restore stopped resuming" into something an
+    // operator can act on. The place this IS fatal is where the job is queued,
+    // before anything has been touched.
     self::set_restore_job($job_id, $job);
   }
 

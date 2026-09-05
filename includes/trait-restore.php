@@ -311,7 +311,17 @@ trait RestorePilot_Restore {
         $job_after_files = self::get_restore_job($job_id);
         if (!empty($job_after_files['poll_token'])) {
           self::ensure_storage();
-          self::write_poll_token_file($job_id, $job_after_files['poll_token']);
+          // Checked and read back. Losing this file here is not cosmetic: the
+          // database has already been swapped, so the option that held the
+          // token is the backup's now, and this file is the only thing that
+          // can authenticate the remaining status polls and the post-restore
+          // password step. A restore that finishes unreachable is worse than
+          // one that says what went wrong.
+          if (!self::write_poll_token_file($job_id, $job_after_files['poll_token'])
+              || self::read_poll_token_file($job_id) !== $job_after_files['poll_token']) {
+            self::write_log('WARNING: the poll token could not be restored after the file phase. '
+              . 'Status polling and the post-restore password step will not authenticate for job ' . $job_id . '.');
+          }
         }
         if ($job_id !== '') {
           self::update_restore_job($job_id, ['checkpoint' => array_merge($checkpoint_base, [

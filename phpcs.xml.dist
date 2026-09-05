@@ -95,13 +95,24 @@
          carries request input. -->
     <exclude name="WordPress.Security.EscapeOutput.ExceptionNotEscaped"/>
 
-    <!-- Silenced filesystem and environment calls. 112 of them, and the
-         pattern was checked rather than assumed: everything load-bearing tests
-         its return value and throws or bails (every fopen for a zip or a
-         journal, every file_put_contents that stores real content). The ones
-         that ignore the result are auxiliary by design — a log line, the
-         status mirror a poller reads, the operation notice — where a failed
-         write must not take down the backup it was describing. -->
+    <!-- Silenced filesystem and environment calls, around 110 of them.
+         Excluded because line-level suppressions on that many genuinely
+         best-effort calls would be noise, not review.
+
+         The justification that stood here was wrong, and RP-038 is what it
+         cost. It listed "the status mirror a poller reads" among the writes
+         that may fail silently. That file is the restore's only durable state
+         once the database swap has replaced wp_options: losing it loses the
+         checkpoint and the token that authenticates every later poll. It was
+         being written with @file_put_contents() and no check, and this
+         exclusion is why no tool said so.
+
+         The writes are checked now, and the invariant this exclusion could
+         otherwise hide again is asserted directly by
+         tests/test_durable_restore_state.php: no silenced write survives in
+         the file that owns the durable restore state, and the calls that
+         remain there are reads and deletes, where a missing file is already
+         handled by the guard around it. -->
     <exclude name="WordPress.PHP.NoSilencedErrors"/>
 
     <!-- Filesystem calls. WPCS prefers WP_Filesystem, which cannot stream: it
