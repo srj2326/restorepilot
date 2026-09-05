@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.7
+Stable tag: 0.5.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -209,6 +209,15 @@ RestorePilot stops immediately, removes maintenance mode, and writes the full er
 
 == Changelog ==
 
+= 0.5.8 =
+* Fixed: deleting the plugin now removes your stored backups, and Master Reset's "also delete stored backups" now actually deletes them. Moving backups out of the uploads directory in 0.5.7 left both of these looking in the old place, so archives were kept while the plugin said it had removed them. Master Reset even wrote "Stored backups were deleted at the operator's request" into the log while leaving every one of them on disk. A backup contains your whole database, so a copy left behind on a site you have handed over or deleted the plugin from matters. A storage directory you set yourself with `RESTOREPILOT_STORAGE_DIR` is never removed by either, because it is yours rather than the plugin's.
+* Security: large backup downloads are checked on every request instead of being placed at a secret web address that a scheduled cleanup deleted six hours later. Where WP-Cron is disabled or the site is quiet, that address kept working. Downloads are resumable, so an interrupted transfer continues rather than restarting. If your host cuts off long downloads, split the backup into volumes, or add `define('RESTOREPILOT_DIRECT_DOWNLOADS', true);` to `wp-config.php` to restore the old behaviour.
+* Fixed: a restore now refuses a backup in the old single-document format that is too large for your server's PHP memory limit, and says what to do about it, instead of accepting it and running out of memory part-way through with the site already in pieces. Backups taken by any recent version stream and are unaffected.
+* Fixed: the files a restore needs in order to be resumed or monitored are now written and checked properly. They are the only record that survives the moment a restore replaces the database, and a failed write was previously ignored, which could leave a restore that could not continue and whose progress could not be read.
+* Fixed: the confirmation dialogs now behave like dialogs. Keyboard focus stays inside them, Escape closes them, and focus returns to the control that opened them; the page behind can no longer be reached with the keyboard or a screen reader.
+* Fixed: when a restore has to invent an administrator email address because none was usable, that address is now valid on sites whose address has no dot in it, such as a local development install at `localhost`.
+* Changed: the plugin's own description, privacy text and FAQ now describe where backups are actually kept and what is removed when you delete the plugin.
+
 = 0.5.7 =
 * Security: your backups are no longer kept where the web server can hand them out. They were stored under `wp-content/uploads`, protected by an `.htaccess` file — which Apache honours and **nginx ignores completely**. On nginx, which is what most managed WordPress hosting runs, a backup could be downloaded by anyone who knew or guessed its address; the only thing standing in the way was the filename. A backup contains your whole database, including every user account and password hash. Backups are now kept in a directory beside your WordPress installation, which your site has no web address for, and existing backups are moved there automatically the next time you open the plugin. Downloading through the plugin is unchanged and has always required you to be logged in as an administrator.
 * Added: where your host does not allow a directory outside the site to be created, backups stay where they are and RestorePilot now says so in the log instead of assuming the `.htaccess` protected them. It checks by placing a file in the backup folder, requesting it over the web, and reporting what came back.
@@ -360,6 +369,9 @@ RestorePilot stops immediately, removes maintenance mode, and writes the full er
 * Initial public release.
 
 == Upgrade Notice ==
+
+= 0.5.8 =
+Fixes two ways stored backups were kept when you asked for them to be deleted: uninstalling the plugin, and Master Reset. Large downloads are now checked on each request rather than left at a public address. Restore reliability and dialog keyboard handling improved.
 
 = 0.5.0 =
 Removes the size limits on backup and restore: backups split into volumes, the database is streamed, and background jobs resume after a host timeout. Keep all volumes of a backup together. Includes a security fix for crafted archives. Requires WordPress 6.2+.
