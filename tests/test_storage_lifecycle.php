@@ -77,6 +77,27 @@ register_shutdown_function(function () use ($sandbox, $OPTION, $original_option)
     if ($original_option !== '') { update_option($OPTION, $original_option, false); }
 });
 
+/**
+ * Point the plugin at a storage directory.
+ *
+ * Always through here, never update_option() directly. The uninstall runs
+ * below delete the option row from a child process, and this process does not
+ * hear about it -- so update_option() reads its cached old value, decides the
+ * row exists, issues an UPDATE that matches nothing, and returns false without
+ * writing. Every later read then gets the stale path. That cost an hour and
+ * three tests that appeared to prove the backfill was broken when it was not.
+ */
+function set_storage_option(string $path): void {
+    global $OPTION;
+    wp_cache_flush();
+    update_option($OPTION, $path, false);
+    wp_cache_flush();
+    if ((string) get_option($OPTION, '') !== $path) {
+        check('The fixture could point storage at ' . basename($path), false,
+            'option reads back as ' . var_export(get_option($OPTION, ''), true));
+    }
+}
+
 /** A directory shaped like one the plugin created. */
 function make_store(string $path, bool $marked = true, array $files = ['backups/archive.zip']): string {
     global $MARKER;
@@ -123,7 +144,7 @@ $bystander = $sandbox . '/purge/somebody-elses-data';
 @mkdir($bystander, 0755, true);
 file_put_contents($bystander . '/important.txt', 'NOT OURS');
 
-update_option($OPTION, $private, false);
+set_storage_option($private);
 check('The private store is listed as ours to remove',
     in_array($private, priv('plugin_owned_storage_dirs'), true),
     implode(', ', array_map('basename', priv('plugin_owned_storage_dirs'))));
@@ -172,7 +193,7 @@ $neighbour = $sandbox . '/uninstall/unrelated';
 @mkdir($neighbour, 0755, true);
 file_put_contents($neighbour . '/keep-me.txt', 'NOT OURS');
 
-update_option($OPTION, $store, false);
+set_storage_option($store);
 
 $runner = $sandbox . '/run-uninstall.php';
 file_put_contents($runner, "<?php\ndefine('WP_UNINSTALL_PLUGIN', 'restorepilot-backup-migration/restorepilot-backup-migration.php');\n"
@@ -194,14 +215,72 @@ wp_cache_flush();
 check('And the option was cleared too',
     get_option($OPTION, '') === '' || get_option($OPTION, '') === false);
 
-// A store the plugin did not create must survive uninstall as well.
-$foreign = make_store($sandbox . '/foreign/' . $DIRNAME, false);
-update_option($OPTION, $foreign, false);
+// A directory the plugin never recorded must survive, marker or not. This is
+// the boundary that matters now that uninstall accepts equivalent evidence for
+// a path its own option names.
+$foreign = make_store($sandbox . '/foreign/somebody-elses-store', false);
+set_storage_option($foreign);
 $out = [];
 exec(rp_test_php_command($runner) . ' 2>&1', $out, $code);
-check('THE LIMIT: an unmarked directory is left alone by uninstall',
+check('THE LIMIT: a directory that is not named like ours survives uninstall',
     is_dir($foreign) && is_file($foreign . '/backups/archive.zip'),
-    'no marker means we cannot prove we made it');
+    'the name is part of the evidence, and this one does not have it');
+
+// ── Sites that migrated before there was a marker ──────────────────────────
+// The fix above requires proof that a directory is ours, and every site that
+// migrated under 0.5.7 has private storage without any. Requiring the marker
+// and stopping there would have left the original defect in place for exactly
+// the people who already have backups outside the web root -- a fix that only
+// works on installations created after it shipped.
+echo "\n=== a site that migrated under an earlier release ===\n";
+
+$legacy = make_store($sandbox . '/upgraded/' . $DIRNAME, false,
+                     ['backups/customer-site.zip']);
+check('It starts with no ownership marker, as 0.5.7 left it',
+    !is_file($legacy . '/' . $MARKER));
+
+set_storage_option($legacy);
+$admins = get_users(['role' => 'administrator', 'number' => 1]);
+if ($admins) { wp_set_current_user($admins[0]->ID); }
+
+RestorePilot_Backup_Migration::maybe_migrate_storage();   // the admin_init hook
+check('THE FIX: loading an admin page backfills the marker',
+    is_file($legacy . '/' . $MARKER),
+    'an upgrade repairs itself rather than silently keeping the defect');
+check('And the directory is now recognised as ours to remove',
+    priv('is_plugin_created_private_storage', [$legacy]) === true);
+
+// The backfill applies the same ownership test, so it must refuse the same
+// directories the deletion would.
+$not_ours = make_store($sandbox . '/upgraded/some-other-folder', false);
+set_storage_option($not_ours);
+RestorePilot_Backup_Migration::maybe_migrate_storage();
+check('THE LIMIT: it will not mark a directory with another name',
+    !is_file($not_ours . '/' . $MARKER),
+    'writing a marker into somebody else\'s directory would make it deletable');
+
+// And the path that never loads an admin page at all: wp plugin delete runs
+// uninstall.php without firing admin_init, so no backfill has happened.
+echo "\n=== the same site deleted from the command line ===\n";
+$cli = make_store($sandbox . '/wpcli/' . $DIRNAME, false, ['backups/site.zip']);
+set_storage_option($cli);
+check('It still has no marker, because admin_init never ran',
+    !is_file($cli . '/' . $MARKER));
+
+$out = [];
+exec(rp_test_php_command($runner) . ' 2>&1', $out, $code);
+check('THE FIX: uninstall removes it anyway, on equivalent evidence',
+    !is_dir($cli),
+    'the path came from an option only this plugin writes, and carries our directory name');
+
+// That relaxation must not extend to a directory we did not record.
+$stranger = make_store($sandbox . '/wpcli/' . $DIRNAME . '-lookalike', false, ['backups/site.zip']);
+set_storage_option($stranger);
+$out = [];
+exec(rp_test_php_command($runner) . ' 2>&1', $out, $code);
+check('THE LIMIT: a directory whose name is merely similar survives',
+    is_dir($stranger),
+    basename($stranger));
 
 // Put the fixture back together for whatever runs next.
 //

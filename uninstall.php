@@ -89,9 +89,28 @@ function restorepilot_backup_migration_uninstall_delete_private_storage(): void 
   if (basename($dir) !== RESTOREPILOT_UNINSTALL_PRIVATE_DIRNAME) {
     return;
   }
-  if (!is_file($dir . '/' . RESTOREPILOT_UNINSTALL_STORAGE_MARKER)) {
-    return;
-  }
+
+  /*
+   * The marker is the primary evidence, and the plugin writes one into every
+   * storage directory it creates. It is not required here, and that is a
+   * deliberate departure from "require a marker" worth explaining.
+   *
+   * Sites that migrated under 0.5.7 have private storage with no marker,
+   * because that release never wrote one. The plugin backfills it on the next
+   * admin page load, which covers ordinary use -- but `wp plugin delete` runs
+   * this file without ever firing admin_init, so a site managed entirely from
+   * WP-CLI would reach here without one and keep the archives that uninstall
+   * has just promised to remove.
+   *
+   * What is accepted instead is the same evidence the backfill itself uses:
+   * this path came out of an option that only migrate_storage_to_private()
+   * ever writes, the directory carries the name this plugin gives its own
+   * storage, and it is not a location the administrator configured (checked
+   * above). A directory reaching all three is one this plugin moved backups
+   * into. Requiring a file that older versions could not have written would
+   * preserve the exact defect this change exists to fix, for precisely the
+   * users who already have backups at risk.
+   */
 
   // Confined to its own parent: enough to remove this tree, never enough to
   // climb out of it.

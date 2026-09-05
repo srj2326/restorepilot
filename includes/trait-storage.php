@@ -1516,7 +1516,14 @@ trait RestorePilot_Storage {
    * says what that means for backups there.
    */
   public static function maybe_migrate_storage(): void {
-    if (get_option(self::STORAGE_PATH_OPTION, '') !== '') {
+    $recorded = (string) get_option(self::STORAGE_PATH_OPTION, '');
+    if ($recorded !== '') {
+      // Storage has already moved -- but possibly under a release that wrote
+      // no ownership marker, which is every site that migrated under 0.5.7.
+      // Those directories would be refused by uninstall and by Master Reset's
+      // purge, leaving exactly the archives both promise to remove. Backfill
+      // the marker so an upgrade repairs itself.
+      self::backfill_storage_marker($recorded);
       return;
     }
     if (!current_user_can('manage_options')) {
@@ -1532,6 +1539,42 @@ trait RestorePilot_Storage {
     }
 
     self::migrate_storage_to_private();
+  }
+
+  /**
+   * Give an already-migrated storage directory the marker it never got.
+   *
+   * Only where the evidence is the same as it would have been at creation
+   * time: the directory is named what we name ours, and it is not a location
+   * the administrator configured. The path itself comes from an option only
+   * migrate_storage_to_private() ever writes, so a directory reached this way
+   * is one this plugin moved backups into.
+   */
+  private static function backfill_storage_marker(string $dir): void {
+    $dir = untrailingslashit($dir);
+    if ($dir === '' || !is_dir($dir) || basename($dir) !== self::PRIVATE_STORAGE_DIRNAME) {
+      return;
+    }
+    if (defined('RESTOREPILOT_STORAGE_DIR')) {
+      $forced = realpath(untrailingslashit((string) RESTOREPILOT_STORAGE_DIR));
+      if ($forced !== false && $forced === realpath($dir)) {
+        return;
+      }
+    }
+
+    $marker = $dir . '/' . self::STORAGE_MARKER_FILE;
+    if (is_file($marker)) {
+      return;
+    }
+    // Best-effort by design: a marker that cannot be written leaves the
+    // directory undeletable, which is the safe direction to fail in.
+    @file_put_contents(
+      $marker,
+      "RestorePilot Backup & Migration created this directory.\n"
+      . "It is removed when the plugin is uninstalled, or by Master Reset when\n"
+      . "the operator chooses to delete stored backups. Delete this file to\n"
+      . "keep the directory in both cases.\n"
+    );
   }
 
   private static function private_storage_root(): string {
@@ -1885,6 +1928,15 @@ trait RestorePilot_Storage {
    * migrated ones were still on disk.
    */
   private static function purge_plugin_storage(): array {
+    // Self-healing rather than dependent on hook order: a site that migrated
+    // under 0.5.7 has no ownership marker, and without one this would decline
+    // to remove the very backups the operator asked it to remove. The backfill
+    // applies the same ownership test before writing anything.
+    $recorded = untrailingslashit((string) get_option(self::STORAGE_PATH_OPTION, ''));
+    if ($recorded !== '') {
+      self::backfill_storage_marker($recorded);
+    }
+
     $failed = [];
     foreach (self::plugin_owned_storage_dirs() as $dir) {
       // Confined to the directory's own parent: enough to delete this tree,
