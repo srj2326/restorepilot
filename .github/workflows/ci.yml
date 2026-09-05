@@ -312,11 +312,28 @@ jobs:
         env:
           RP_TEST_SITE: /tmp/wp
           RP_TEST_PHP: php
-          # TCP rather than a socket here; env.php passes this straight to the
-          # child processes, so this is the piece most likely to need work on
-          # the first real run.
           RP_TEST_MYSQL_SOCKET: ''
         run: |
           cd "$GITHUB_WORKSPACE/plugin"
           chmod +x tests/gate.sh build.sh
           ./tests/gate.sh
+
+      # Last, and only here. Master Reset deletes the posts, plugins, themes,
+      # users and uploads of the site it runs on, so it can be run for real
+      # exactly once and nothing can follow it. This WordPress was built from
+      # nothing at the start of this job and is thrown away at the end, which
+      # makes it the only place the handler itself can be exercised.
+      #
+      # Everything else covering Master Reset calls its pieces; the wiring
+      # between the "also delete stored backups" box and the deletion had no
+      # test at all, which is how 0.5.8 shipped a fix to that path with the
+      # handler never once run.
+      - name: Master Reset, end to end
+        env:
+          RP_TEST_SITE: /tmp/wp
+          RP_TEST_PHP: php
+          RP_TEST_MYSQL_SOCKET: ''
+          RP_TEST_DESTRUCTIVE: '1'
+        run: |
+          cd "$GITHUB_WORKSPACE/plugin"
+          php tests/test_master_reset_e2e.php
