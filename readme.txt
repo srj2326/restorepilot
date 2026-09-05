@@ -23,7 +23,7 @@ Most backup plugins are tested by how well backups work. Restores get tested les
 * **A rollback point before every restore.** RestorePilot saves your current database before it changes anything, and you can restore straight from it if something goes wrong — no separate backup step, no remembering to do it yourself.
 * **Resumes instead of restarting.** A host timeout, a closed browser tab, a slow connection — collecting files and restoring both pick up from where they stopped, and a restore continues partway through a single large database table. The one step that does not resume is the database export inside a backup: it is taken as a single consistent snapshot, which cannot outlive the process that opened it, so if that step is cut short it starts again rather than stitching together tables read at different moments.
 * **Volume splitting for large sites.** Backups are split into volumes automatically, so a host's per-file size limit stops being a reason a backup can fail. Free disk space, rather than file size, becomes the limit.
-* **Nothing leaves your server.** Backups are written to your own WordPress uploads directory. RestorePilot has no cloud storage integration and sends nothing to the plugin author or any third party — see Privacy & data below.
+* **Nothing leaves your server.** Backups are written to your own server, in a directory beside WordPress where the web server cannot serve them, falling back to the uploads directory if that is not writable. RestorePilot has no cloud storage integration and sends nothing to the plugin author or any third party — see Privacy & data below.
 * **Built for migration, not just backup.** Source and target URLs are detected automatically from the backup itself, with serialized-safe replacement across options, widgets, and post meta — restoring a backup on a different domain does not need a manual search-and-replace pass.
 
 = Features =
@@ -105,7 +105,9 @@ This is an early release. Always test restores on a staging site before using Re
 
 = Privacy & data =
 
-RestorePilot creates backup files that may contain personal data from your WordPress database, media library, themes, plugins, and uploaded files. Backups are stored locally on your own server inside the WordPress uploads directory unless you manually download or move them elsewhere. RestorePilot does not send backup data to the plugin author or to any third-party service.
+RestorePilot creates backup files that may contain personal data from your WordPress database, media library, themes, plugins, and uploaded files. Backups are stored locally on your own server, in a `restorepilot-private-storage` directory beside the WordPress installation so that no URL reaches them; if that location cannot be written, they stay in a protected folder inside the uploads directory instead. They remain there unless you download or move them yourself. RestorePilot does not send backup data to the plugin author or to any third-party service.
+
+Deleting the plugin removes the stored backups along with it, from either location. A storage directory you configured yourself with `RESTOREPILOT_STORAGE_DIR` is left untouched, since it is yours rather than the plugin's.
 
 == Screenshots ==
 
@@ -147,7 +149,9 @@ Yes. URL replacement is applied after unserializing values where possible, then 
 
 = Where are backups stored? =
 
-Under the WordPress uploads directory in a protected `restorepilot-backup-migration` folder. The folder is excluded from future RestorePilot backups.
+In a `restorepilot-private-storage` directory next to your WordPress installation — outside the web root, so no request can reach a backup even on servers that ignore `.htaccess`, which is most of them. If that directory cannot be created or written, RestorePilot falls back to a protected `restorepilot-backup-migration` folder under the uploads directory and says so on the Status tab.
+
+Either way the folder is excluded from future RestorePilot backups. You can choose the location yourself by defining `RESTOREPILOT_STORAGE_DIR` in `wp-config.php`; a directory you name that way is never deleted by the plugin, including on uninstall.
 
 = Are other backup plugins' files excluded from the backup? =
 

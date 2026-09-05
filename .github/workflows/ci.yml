@@ -84,12 +84,39 @@ jobs:
 
       # build.sh asserts the allowlist itself: no tests, no build tooling, no
       # audit reports, every require resolving inside the package, versions
-      # agreeing, a changelog entry present. The zip it produces is what
-      # WordPress.org would serve.
+      # agreeing, a changelog entry present. --zip is required: without it the
+      # script stages the directory and writes no archive at all, so this job
+      # uploaded nothing and every downstream job was skipped.
       - name: Build and assert the package
         run: |
           chmod +x build.sh
-          PHP_BIN=$(which php) ./build.sh
+          PHP_BIN=$(which php) ./build.sh --zip
+
+      # The allowlist is build.sh's job; this checks the artifact that actually
+      # leaves the runner, because that is the thing WordPress.org serves.
+      - name: Verify the archive that will be uploaded
+        run: |
+          set -e
+          zips=(dist/*.zip)
+          if [[ ${#zips[@]} -ne 1 ]]; then
+            echo "expected exactly one zip, found ${#zips[@]}: ${zips[*]}"; exit 1
+          fi
+          zip="${zips[0]}"
+          echo "checking $zip"
+
+          # Every entry must sit under the one plugin directory, so the archive
+          # unpacks into wp-content/plugins/restorepilot-backup-migration.
+          if unzip -Z1 "$zip" | grep -qv '^restorepilot-backup-migration/'; then
+            echo "archive has entries outside the plugin directory:"
+            unzip -Z1 "$zip" | grep -v '^restorepilot-backup-migration/'
+            exit 1
+          fi
+
+          # Nothing that only exists to develop or audit the plugin.
+          if unzip -Z1 "$zip" | grep -Ei '(^|/)(tests?|\.github|\.claude|vendor|node_modules)/|CODEX-|build\.sh|composer\.(json|lock)|phpcs\.xml|\.distignore|\.gitignore'; then
+            echo "archive contains material that must never ship"; exit 1
+          fi
+          echo "archive contents OK: $(unzip -Z1 "$zip" | wc -l) entries"
 
       - uses: actions/upload-artifact@v4
         with:

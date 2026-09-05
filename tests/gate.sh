@@ -76,6 +76,7 @@ FAST_TESTS=(
   test_documented_claims          # what the readme promises is what the code does
   test_no_dead_guards             # no guard or PHPCS exemption that only looks like one
   test_dialog_focus               # every modal goes through the one focus controller
+  test_storage_lifecycle          # uninstall and Master Reset delete the backups they claim to
 )
 
 if [[ "$1" == "--install" ]]; then

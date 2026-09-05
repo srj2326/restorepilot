@@ -820,6 +820,7 @@ trait RestorePilot_RequestHandlers {
     // error rather than a false success. This is checked at the end alongside
     // the post-reset usability invariants that already existed.
     $reset_problems = [];
+    $failed_storage = [];
     $dropped_foreign = 0;
     // Explicitly asked for, and off unless it was: these backups are the only
     // route back from this action.
@@ -962,8 +963,26 @@ trait RestorePilot_RequestHandlers {
       if (!self::master_reset_wipe_dir($upload['basedir'], self::content_dir(), $purge_backups)) {
         $reset_problems[] = 'one or more files in the uploads directory could not be removed';
       }
+
     } else {
       $reset_problems[] = 'could not determine the uploads directory, so it was not cleared';
+    }
+
+    // RP-036. The uploads wipe above is not a proxy for "delete the stored
+    // backups": once storage has been migrated out of the web root it is not a
+    // descendant of the uploads directory at all, so the operator's choice
+    // silently did nothing while the log said backups had been deleted. Purge
+    // the plugin's own storage locations explicitly, and name any that survive
+    // rather than reporting a success that did not happen.
+    //
+    // Outside the uploads branch on purpose: the private store does not depend
+    // on the uploads directory being resolvable, and a site where it is not is
+    // exactly where quietly skipping this would be worst.
+    if ($purge_backups) {
+      $failed_storage = self::purge_plugin_storage();
+      foreach ($failed_storage as $failed_dir) {
+        $reset_problems[] = 'stored backups could not be deleted from ' . $failed_dir;
+      }
     }
 
     // 5. Delete all plugins except RestorePilot
@@ -1049,7 +1068,10 @@ trait RestorePilot_RequestHandlers {
     }
 
     self::write_log('Master Reset complete. Site reset to clean WordPress state. Dropped ' . $dropped_foreign
-      . ' table(s) belonging to other plugins. Stored backups were ' . ($purge_backups ? 'deleted at the operator\'s request.' : 'kept.')
+      . ' table(s) belonging to other plugins. Stored backups were '
+      . ($purge_backups
+          ? (empty($failed_storage) ? 'deleted at the operator\'s request.' : 'only partly deleted; see the problems above.')
+          : 'kept.')
       . ' Must-use plugins: ' . ($purge_mu ? ($removed_mu . ' removed at the operator\'s request.') : 'kept.'));
 
     wp_send_json_success([

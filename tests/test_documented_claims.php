@@ -99,6 +99,42 @@ check('A restore really does resume partway through a table',
     stripos($restore_src, '$skip_remaining') !== false,
     'it counts what is already written and carries on from there');
 
+// ── Where the documents say backups live ───────────────────────────────────
+// RP-042. Moving storage out of the uploads directory left the description,
+// the privacy section, the FAQ and the generated privacy-policy text all still
+// saying "uploads directory". An operator reads those to decide what their own
+// server backups need to include, and to answer deletion requests.
+echo "\n=== where the documents say backups are kept ===\n";
+
+$bootstrap = file_get_contents($root . '/includes/trait-bootstrap.php');
+
+foreach (['README.md' => $readme_md, 'readme.txt' => $readme_tx] as $name => $doc) {
+    check("$name does not claim backups live in the uploads directory",
+        stripos($doc, 'written to your own WordPress uploads directory') === false
+        && stripos($doc, 'inside the WordPress uploads directory unless') === false);
+
+    check("$name describes the private location and the fallback",
+        stripos($doc, 'beside') !== false || stripos($doc, 'next to your WordPress') !== false);
+}
+
+check('readme.txt says what happens to backups on uninstall',
+    stripos($readme_tx, 'Deleting the plugin removes the stored backups') !== false,
+    'the privacy section makes a deletion promise, so it has to be the one that is kept');
+
+check('The generated privacy policy agrees with the readme',
+    stripos($bootstrap, 'uploads directory unless an administrator') === false
+    && stripos($bootstrap, 'beside the WordPress installation') !== false);
+
+check('And it does not promise to delete a directory the administrator chose',
+    stripos($bootstrap, 'configured explicitly is left in place') !== false);
+
+// The code still works the way they now describe.
+check('A private location outside WordPress is still what the code prefers',
+    strpos(file_get_contents($root . '/includes/trait-storage.php'), 'private_storage_root') !== false);
+check('And uploads is still the fallback when it is not writable',
+    strpos(file_get_contents($root . '/includes/trait-storage.php'),
+        "\$upload = wp_upload_dir(null, false);\n    return trailingslashit(\$upload['basedir']) . 'restorepilot-backup-migration';") !== false);
+
 echo "\n" . ($failures ? (count($failures) . ' FAILURE(S): ' . implode('; ', $failures)) : 'ALL CHECKS PASSED') . "\n";
 
 exit(empty($failures) ? 0 : 1);

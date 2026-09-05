@@ -149,6 +149,15 @@ final class RestorePilot_Backup_Migration {
   const STORAGE_PATH_OPTION = 'restorepilot_storage_path';
   // Name of the directory created outside the site when one can be.
   const PRIVATE_STORAGE_DIRNAME = 'restorepilot-private-storage';
+  /*
+   * Written into any storage directory this plugin creates, and required
+   * before uninstall or Master Reset will delete one. The private store sits
+   * outside the WordPress directory, where we have no general licence to
+   * remove things: the name alone is a guess, and a marker we wrote ourselves
+   * is evidence. An administrator who points RESTOREPILOT_STORAGE_DIR at a
+   * location of their own never gets one, and is never deleted.
+   */
+  const STORAGE_MARKER_FILE = '.restorepilot-storage';
   const RESTORE_SUCCESS_OPTION = 'restorepilot_restore_success_notice';
   private static $initialized = false;
   private static $error_logging_enabled = false;

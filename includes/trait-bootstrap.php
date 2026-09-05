@@ -64,7 +64,8 @@ trait RestorePilot_Bootstrap {
     }
     $content = wp_kses_post(
       '<p>' . __('RestorePilot Backup &amp; Migration creates backup archives of this site. A backup can contain personal data stored in the WordPress database (for example, user accounts, comments, and post content) as well as files in the media library, themes, plugins, and uploads directory.', 'restorepilot-backup-migration') . '</p>'
-      . '<p>' . __('Backup archives are stored locally on this server inside the WordPress uploads directory unless an administrator downloads or moves them. RestorePilot does not send backup data to the plugin author or to any third-party service.', 'restorepilot-backup-migration') . '</p>'
+      . '<p>' . __('Backup archives are stored locally on this server, in a directory beside the WordPress installation that the web server cannot serve; if that location is not writable they are kept in a protected folder inside the uploads directory instead. They remain there unless an administrator downloads or moves them. RestorePilot does not send backup data to the plugin author or to any third-party service.', 'restorepilot-backup-migration') . '</p>'
+      . '<p>' . __('Deleting the plugin removes those stored backups. A storage directory an administrator has configured explicitly is left in place, because it belongs to the site rather than to the plugin.', 'restorepilot-backup-migration') . '</p>'
       . '<p>' . __('When you delete a backup — or uninstall the plugin — the corresponding archive files are removed from the server. If you download backups, you are responsible for storing and disposing of them securely.', 'restorepilot-backup-migration') . '</p>'
     );
     wp_add_privacy_policy_content('RestorePilot Backup & Migration', $content);

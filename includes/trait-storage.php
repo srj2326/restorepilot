@@ -1271,6 +1271,21 @@ trait RestorePilot_Storage {
       self::write_file($rollback_index, "<?php\n// Silence is golden.\n", 'restore rollback index');
     }
 
+    // Proof of ownership for the two operations that delete this directory.
+    // Written here rather than only at migration time so a site that moved
+    // storage under an earlier release gains one as soon as it is used again.
+    $marker = self::storage_dir() . '/' . self::STORAGE_MARKER_FILE;
+    if (!file_exists($marker)) {
+      self::write_file(
+        $marker,
+        "RestorePilot Backup & Migration created this directory.\n"
+        . "It is removed when the plugin is uninstalled, or by Master Reset when\n"
+        . "the operator chooses to delete stored backups. Delete this file to\n"
+        . "keep the directory in both cases.\n",
+        'storage ownership marker'
+      );
+    }
+
     $htaccess = self::storage_dir() . '/.htaccess';
     if (!file_exists($htaccess)) {
       self::write_file($htaccess, self::deny_htaccess(), 'storage protection');
@@ -1739,6 +1754,85 @@ trait RestorePilot_Storage {
     }
 
     return $total;
+  }
+
+  /**
+   * Is this a private storage directory this plugin created?
+   *
+   * RP-035/RP-036. The private store lives outside the WordPress directory,
+   * so "delete the plugin's storage" has to mean something narrower than
+   * "delete whatever the option points at". Three things must hold: the
+   * administrator has not named this location themselves, the directory is
+   * called what we call ours, and it carries the marker we write into
+   * directories we create. Any one of them missing and we leave it alone.
+   */
+  private static function is_plugin_created_private_storage(string $dir): bool {
+    $dir = untrailingslashit($dir);
+    if ($dir === '' || !is_dir($dir)) {
+      return false;
+    }
+
+    // An explicitly configured location belongs to whoever configured it. We
+    // do not know what else lives there, and a recursive delete is not ours
+    // to perform on a path we were merely handed.
+    if (defined('RESTOREPILOT_STORAGE_DIR')) {
+      $forced = realpath(untrailingslashit((string) RESTOREPILOT_STORAGE_DIR));
+      if ($forced !== false && $forced === realpath($dir)) {
+        return false;
+      }
+    }
+
+    if (basename($dir) !== self::PRIVATE_STORAGE_DIRNAME) {
+      return false;
+    }
+
+    return is_file($dir . '/' . self::STORAGE_MARKER_FILE);
+  }
+
+  /**
+   * Every storage location this plugin created and may therefore remove.
+   *
+   * The uploads locations are fixed paths the plugin has always made itself.
+   * The private one is included only when is_plugin_created_private_storage()
+   * agrees, so an administrator-chosen directory is reported nowhere here and
+   * cannot be deleted by either caller.
+   */
+  private static function plugin_owned_storage_dirs(): array {
+    $dirs = [];
+
+    $upload = wp_upload_dir(null, false);
+    if (empty($upload['error']) && !empty($upload['basedir'])) {
+      $base = trailingslashit($upload['basedir']);
+      $dirs[] = $base . 'restorepilot-backup-migration';
+      $dirs[] = $base . 'restorepilot-direct-downloads';
+    }
+
+    $recorded = untrailingslashit((string) get_option(self::STORAGE_PATH_OPTION, ''));
+    if ($recorded !== '' && self::is_plugin_created_private_storage($recorded)) {
+      $dirs[] = $recorded;
+    }
+
+    return array_values(array_unique(array_filter($dirs, 'is_dir')));
+  }
+
+  /**
+   * Delete every storage location this plugin owns.
+   *
+   * Returns the paths it could not remove, so the caller can say which ones
+   * rather than claiming a success it did not achieve -- the specific defect
+   * this exists to fix, where Master Reset reported backups deleted while the
+   * migrated ones were still on disk.
+   */
+  private static function purge_plugin_storage(): array {
+    $failed = [];
+    foreach (self::plugin_owned_storage_dirs() as $dir) {
+      // Confined to the directory's own parent: enough to delete this tree,
+      // never enough to climb out of it.
+      if (!self::delete_directory($dir, dirname($dir))) {
+        $failed[] = $dir;
+      }
+    }
+    return $failed;
   }
 
   /**

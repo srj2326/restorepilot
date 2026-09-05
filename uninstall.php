@@ -34,10 +34,68 @@ function restorepilot_backup_migration_uninstall_cleanup(): void {
   restorepilot_backup_migration_uninstall_site_cleanup();
 }
 
+/*
+ * The plugin's own class is not loaded during uninstall -- WordPress includes
+ * this file on its own -- so the two values that identify a storage directory
+ * we created are repeated here. test_uninstall_removes_storage asserts they
+ * still match RestorePilot_Backup_Migration::PRIVATE_STORAGE_DIRNAME and
+ * ::STORAGE_MARKER_FILE, so renaming either constant cannot quietly leave
+ * uninstall unable to find what it is supposed to remove.
+ */
+const RESTOREPILOT_UNINSTALL_PRIVATE_DIRNAME = 'restorepilot-private-storage';
+const RESTOREPILOT_UNINSTALL_STORAGE_MARKER  = '.restorepilot-storage';
+
 function restorepilot_backup_migration_uninstall_site_cleanup(): void {
   restorepilot_backup_migration_uninstall_clear_cron();
-  restorepilot_backup_migration_uninstall_delete_options();
+  // Storage before options, deliberately. The option recording where backups
+  // were moved to is itself a restorepilot_* option, so deleting options first
+  // -- which is what this did -- threw away the only pointer to the private
+  // directory and left every archive in it on disk, undiscoverable, while the
+  // privacy policy promised uninstall had removed them.
+  restorepilot_backup_migration_uninstall_delete_private_storage();
   restorepilot_backup_migration_uninstall_delete_uploads();
+  restorepilot_backup_migration_uninstall_delete_options();
+}
+
+/**
+ * Remove the storage directory the plugin created outside WordPress.
+ *
+ * This deletes a tree that is not under ABSPATH, so it demands proof rather
+ * than inference: the administrator has not named this location themselves,
+ * it is called what we call ours, and it carries the marker file the plugin
+ * writes into directories it creates. Any one of those missing and the
+ * directory is left exactly as it is.
+ */
+function restorepilot_backup_migration_uninstall_delete_private_storage(): void {
+  $recorded = get_option('restorepilot_storage_path', '');
+  if (!is_string($recorded) || $recorded === '') {
+    return;
+  }
+
+  $dir = rtrim(str_replace('\\', '/', $recorded), '/');
+  if ($dir === '' || !is_dir($dir)) {
+    return;
+  }
+
+  // A location an administrator configured is theirs to manage. We have no
+  // idea what else lives there and no licence to recurse through it.
+  if (defined('RESTOREPILOT_STORAGE_DIR')) {
+    $forced = realpath(rtrim((string) RESTOREPILOT_STORAGE_DIR, '/\\'));
+    if ($forced !== false && $forced === realpath($dir)) {
+      return;
+    }
+  }
+
+  if (basename($dir) !== RESTOREPILOT_UNINSTALL_PRIVATE_DIRNAME) {
+    return;
+  }
+  if (!is_file($dir . '/' . RESTOREPILOT_UNINSTALL_STORAGE_MARKER)) {
+    return;
+  }
+
+  // Confined to its own parent: enough to remove this tree, never enough to
+  // climb out of it.
+  restorepilot_backup_migration_uninstall_delete_directory($dir, dirname($dir));
 }
 
 function restorepilot_backup_migration_uninstall_clear_cron(): void {
