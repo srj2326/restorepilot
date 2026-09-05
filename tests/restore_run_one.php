@@ -10,13 +10,15 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Runs exactly ONE resumption, as a genuinely fresh PHP process — this is
 // what a real loopback/cron dispatch actually does. Prints the resulting
 // job status/checkpoint progress so the driving bash loop can decide
 // whether to invoke another one.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 require $site_root . '/wp-load.php';
 require_once $plugin_file;
 

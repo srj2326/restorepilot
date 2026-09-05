@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for two fixes to assemble_restore_chunks(): (1) each
 // chunk is now unlinked immediately after its content is durably written
 // into the combined file, instead of the whole chunk set staying on disk
@@ -20,7 +22,7 @@ if (PHP_SAPI !== 'cli') {
 // both against real chunk files and a real (if artificially inflated via
 // a sparse file) size comparison — not just read through the code.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

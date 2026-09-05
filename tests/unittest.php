@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 /**
  * Runtime unit tests for the plugin's PURE helpers (no WP/DB needed):
  *  - make_json_safe() / decode_b64_column_value() binary round-trip
@@ -18,7 +20,7 @@ if (PHP_SAPI !== 'cli') {
  */
 error_reporting(E_ALL); ini_set('display_errors','1');
 
-$plugin = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$plugin = rp_test_plugin_file();
 define('ABSPATH', '/tmp/wp-abspath/');
 define('WP_CONTENT_DIR', '/tmp/wp-abspath/wp-content');
 define('HOUR_IN_SECONDS', 3600); define('DAY_IN_SECONDS', 86400); define('MINUTE_IN_SECONDS', 60);

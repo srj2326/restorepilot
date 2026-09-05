@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Runs exactly ONE chunk of the REAL restore job, in its own fresh process
 // — same reasoning as run_one_restore_chunk.php earlier this session, but
 // for the actual production restore, with the plugin's own real ~20s
@@ -19,7 +21,7 @@ if (PHP_SAPI !== 'cli') {
 // safe (whichever gets there first wins; the other finds the lock held and
 // returns immediately).
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 
 // Same gotcha documented in project memory from earlier this session: a raw
 // CLI invocation is not exempt from should_block_for_maintenance() the way

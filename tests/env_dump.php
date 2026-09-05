@@ -10,17 +10,16 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+/**
+ * Reports the resolved test environment to the shell runners, one value a line.
+ *
+ * Kept deliberately dumb: the resolution and the refusal both live in env.php,
+ * so the shell cannot end up pointed at a different site than the PHP tests.
+ */
+
 require_once __DIR__ . '/env.php';
 
-define("WP_USE_THEMES", false);
-define("WP_ADMIN", true);
-$_SERVER["HTTP_HOST"] = "morecalculators-dev.local";
-$_SERVER["REQUEST_URI"] = "/wp-admin/";
-chdir(dirname(rp_test_plugin_dir(), 3));
-require "wp-load.php";
-require_once ABSPATH . 'wp-admin/includes/plugin.php';
-wp_set_current_user(1);
-if (!class_exists('RestorePilot_Backup_Migration')) {
-  require_once WP_CONTENT_DIR . '/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
-}
+$cfg = rp_test_config();
+rp_test_site();  // Refuses an unmarked or missing fixture, with instructions.
 
+echo $cfg['plugin'], "\n", $cfg['site'], "\n", $cfg['php'], "\n", $cfg['socket'], "\n";

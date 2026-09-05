@@ -10,12 +10,14 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 require __DIR__ . '/validator.php';
 
 define("WP_USE_THEMES", false);
 $_SERVER["HTTP_HOST"] = "morecalculators-dev.local";
 $_SERVER["REQUEST_URI"] = "/";
-chdir("/Users/surajitroy/Local Sites/morecalculators-dev/app/public");
+chdir(dirname(rp_test_plugin_dir(), 3));
 require "wp-load.php";
 
 global $wpdb;

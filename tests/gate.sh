@@ -12,10 +12,9 @@
 # belong before a release, not before a commit.
 
 S="$(cd "$(dirname "$0")" && pwd)"
-PLUGIN_DIR="/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration"
-SITE_DIR="/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-content/plugins/restorepilot-backup-migration"
-PHP_BIN="/Users/surajitroy/Library/Application Support/Local/lightning-services/php-8.2.29+0/bin/darwin-arm64/bin/php"
-SOCK="/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock"
+# PLUGIN_DIR, SITE_DIR, PHP_BIN, SOCK and php_run() come from the resolved
+# environment, which refuses a fixture site that is not marked disposable.
+source "$S/env.sh" || exit 2
 
 # The release package is checked on every commit, not only at release time.
 # An allowlist that is never exercised is a list of good intentions, and the

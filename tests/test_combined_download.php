@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies the NEW single-file streaming reconstruction for multi-volume
 // backup downloads: write_combined_volumes() (the core loop behind
 // serve_combined_volume_download()) must produce ONE valid zip file whose
@@ -18,7 +20,7 @@ if (PHP_SAPI !== 'cli') {
 // real HTTP download does (just writing to a local file instead of
 // php://output so this test can inspect the result afterward).
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

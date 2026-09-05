@@ -10,13 +10,15 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for the rollback-point multi-volume grouping fix.
 // Verifies list_restore_rollback_points() treats a multi-volume rollback
 // set as ONE logical point (not one per physical volume), and that
 // enforce_restore_rollback_retention() deletes every volume of an evicted
 // set together rather than leaving orphaned siblings behind.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

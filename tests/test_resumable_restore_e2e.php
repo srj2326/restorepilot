@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Full end-to-end test of resumable restore: back up sunhsine-bkp with some
 // known, tagged test data; corrupt that data live; restore the backup back
 // onto the SAME site (source == target, so no URL rewriting to reason
@@ -19,8 +21,8 @@ if (PHP_SAPI !== 'cli') {
 // Verifies the final state matches the backup exactly, not just that
 // nothing crashed.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

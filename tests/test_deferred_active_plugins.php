@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies the fix for the mid-restore plugin-loading crash.
 //
 // The database phase swaps in the BACKUP's wp_options — including its
@@ -31,13 +33,14 @@ if (PHP_SAPI !== 'cli') {
 //   (2) throughout the whole window the live option really is minimal, and
 //       by completion the real list is genuinely back.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 // Local by Flywheel's MySQL socket. The default /tmp/mysql.sock belongs to an
 // unrelated Homebrew MySQL on this machine, so it must be given explicitly.
 // Used by db_option_raw()'s own fresh connections (see the note there).
-const RP_TEST_SOCKET = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
+// define(), not const: a const initialiser cannot call a function.
+define('RP_TEST_SOCKET', rp_test_socket());
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {
@@ -265,8 +268,8 @@ call_private('set_restore_job', [$job_id, [
 // It also makes the window sampling strictly more faithful: the parent now
 // reads active_plugins from a genuinely separate process between chunks,
 // which is exactly what a real loopback or cron bootstrap would see.
-$php_bin = '/Users/surajitroy/Library/Application Support/Local/lightning-services/php-8.2.29+0/bin/darwin-arm64/bin/php';
-$sock = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
+$php_bin = rp_test_php();
+$sock = rp_test_socket();
 $runner = __DIR__ . '/run_one_restore_chunk.php';
 
 // Reads an option over a BRAND-NEW database connection every time, bypassing

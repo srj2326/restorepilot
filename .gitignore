@@ -4,3 +4,6 @@ CODEX-*.md
 
 # Release staging, rebuilt by build.sh
 /dist/
+
+# Local test environment (paths differ per machine)
+tests/config.local.php

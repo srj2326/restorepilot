@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Measures the fixed per-resumption overhead every restore chunk pays before
 // it can do any real work: open_backup_archive() + assert_restore_zip_entry_count()
 // + assert_restore_disk_space() + validate_backup_zip(). This is what a
@@ -18,8 +20,8 @@ if (PHP_SAPI !== 'cli') {
 // even under the default (much larger) chunk budget, not just an aggressive
 // test one.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

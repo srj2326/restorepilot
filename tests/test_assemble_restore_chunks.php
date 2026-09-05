@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Directly tests assemble_restore_chunks()'s success path (not just the
 // write_stream() diagnostics it calls into), since it's one of the 4 call
 // sites whose write_stream() signature changed this phase. Simulates what
@@ -17,7 +19,7 @@ if (PHP_SAPI !== 'cli') {
 // files named part-000000, part-000001, ... into restore_chunk_dir(), then
 // assemble them and verify the result is byte-identical to the concatenation.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

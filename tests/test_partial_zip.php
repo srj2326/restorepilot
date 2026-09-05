@@ -10,12 +10,14 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Smoke-tests build_partial_zip(), which uses RestorePilot_Backup_Zip_Writer
 // directly (not through Volume_Writer) — confirms the create() rename there
 // didn't break it.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

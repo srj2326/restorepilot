@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies the new "Create a new admin login" restore option: a brand-new
 // administrator account is created exactly once (checkpoint-gated the same
 // way rollback creation is, so a resumption doesn't create a second one),
@@ -17,8 +19,8 @@ if (PHP_SAPI !== 'cli') {
 // through the status-poll response exactly once and cleared immediately
 // after, and turning the option off creates no account at all.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

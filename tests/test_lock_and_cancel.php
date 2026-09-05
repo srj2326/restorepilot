@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies two things the file-content test above can't see directly:
 // 1) the site-wide backup lock stays held across a yield (a second backup
 //    attempt must be rejected mid-job, not just while a chunk is actively
@@ -17,8 +19,8 @@ if (PHP_SAPI !== 'cli') {
 // 2) canceling a job mid-way through a multi-volume backup cleans up every
 //    temp volume it created, not just the first.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

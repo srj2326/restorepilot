@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Full end-to-end test: create a real table shaped exactly like Wordfence's
 // wp_wflivetraffichuman (composite BINARY primary key), populate it with
 // enough random binary rows that the OLD bug would reliably produce
@@ -17,7 +19,7 @@ if (PHP_SAPI !== 'cli') {
 // cycle (not just the encode/decode functions in isolation), and confirm
 // every single row survives byte-for-byte with no duplicate-key failure.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

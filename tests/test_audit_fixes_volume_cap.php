@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for the volume-filename-cap fix: is_follow_on_volume()
 // and discover_volumes() used to require EXACTLY 3 digits (-vNNN.zip),
 // while the writer's str_pad() naturally overflows to more digits past
@@ -18,7 +20,7 @@ if (PHP_SAPI !== 'cli') {
 // hand-crafted files (no real 1000-volume backup needed) since
 // discover_volumes() only ever reads filenames, never zip content.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

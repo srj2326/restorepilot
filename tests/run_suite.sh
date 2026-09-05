@@ -8,20 +8,18 @@
 # inside wp-load -- reported today as five failures when there was one, and
 # the real one was the first rather than the loudest.
 S="$(cd "$(dirname "$0")" && pwd)"
-PHP_BIN="/Users/surajitroy/Library/Application Support/Local/lightning-services/php-8.2.29+0/bin/darwin-arm64/bin/php"
-SOCK="/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock"
+# PHP_BIN, SOCK, SITE_ROOT and php_run() come from the resolved environment,
+# which refuses a fixture site that is not marked disposable.
+source "$S/env.sh" || exit 2
 OUT="$1"; shift
-
-php_run() {
-  "$PHP_BIN" -d "mysqli.default_socket=$SOCK" -d "pdo_mysql.default_socket=$SOCK" -d "memory_limit=1024M" "$@"
-}
 
 # A site that cannot boot fails every test for the same reason; say so once
 # rather than 19 times.
 health_check() {
+  export RP_SITE_ROOT="$SITE_ROOT"
   php_run -r '
     define("WP_USE_THEMES", false);
-    require_once "/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php";
+    require_once getenv("RP_SITE_ROOT") . "/wp-load.php";
     if (!class_exists("RestorePilot_Backup_Migration")) { exit(2); }
     exit(0);
   ' >/dev/null 2>&1

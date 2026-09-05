@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for the exact bug just reported: a combined single-file
 // download's embedded manifest.json still claimed the original volume
 // count (e.g. 17), so open_backup_archive() — the same completeness check
@@ -22,7 +24,7 @@ if (PHP_SAPI !== 'cli') {
 // present and byte-correct after the manifest rewrite (i.e. rewriting one
 // entry didn't disturb any other entry's data or the central directory).
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

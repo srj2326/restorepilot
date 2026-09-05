@@ -22,8 +22,8 @@ if (PHP_SAPI !== 'cli') {
  * the code to be right.
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 
 $failures = [];
 function check(string $label, bool $ok) {
@@ -38,7 +38,7 @@ function call_private($name, $args = []) {
 }
 
 // ── Structural: the dispatch must come after the lock release ─────────────
-$src = file_get_contents('/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php');
+$src = file_get_contents(rp_test_plugin_file());
 
 foreach ([
     'restore' => ['release_restore_worker_lock', 'dispatch_restore_worker', 'run_restore_job'],

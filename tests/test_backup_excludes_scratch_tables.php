@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test: a backup must never include this plugin's own restore
 // scratch tables (RESTORE_TMP_TABLE_MARKER / RESTORE_OLD_TABLE_MARKER
 // patterns). These only exist if an earlier restore was interrupted before
@@ -18,8 +20,8 @@ if (PHP_SAPI !== 'cli') {
 // site tables, ballooning that backup's own restore plan and cascading
 // slow-restore failures into every test that ran after it.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {
   require_once $plugin_file;

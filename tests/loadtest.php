@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 /**
  * Stubbed-WordPress load smoke test.
  * Confirms the plugin file loads + bootstraps under PHP 8.2 with no fatal
@@ -21,7 +23,7 @@ if (PHP_SAPI !== 'cli') {
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
-$plugin = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$plugin = rp_test_plugin_file();
 
 // Minimal WP environment.
 define('ABSPATH', '/tmp/wp-abspath/');

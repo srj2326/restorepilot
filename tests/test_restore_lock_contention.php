@@ -10,14 +10,16 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies a second restore attempt is rejected while the first is
 // genuinely between chunks (not actively executing, just paused waiting
 // for its next resumption) — the restore-side counterpart to the backup
 // lock-contention test. Uses a large-enough fixture and small chunk budget,
 // in-process, to reliably land mid-restore before checking.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

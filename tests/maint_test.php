@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 /**
  * Integration test (real files, no browser/DB) for the maintenance drop-in
  * preserve/restore round-trip — validates this session's data-loss fix and the
@@ -23,7 +25,7 @@ $wpContent = $base . '/wp-content';
 $uploads   = $wpContent . '/uploads';
 @mkdir($uploads, 0777, true);
 
-$plugin = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$plugin = rp_test_plugin_file();
 define('ABSPATH', $base . '/');
 define('WP_CONTENT_DIR', $wpContent);
 define('HOUR_IN_SECONDS', 3600); define('DAY_IN_SECONDS', 86400); define('MINUTE_IN_SECONDS', 60);

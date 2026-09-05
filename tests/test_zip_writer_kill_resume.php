@@ -16,9 +16,10 @@ if (PHP_SAPI !== 'cli') {
 // truncated mid-write. Still needs wp-load.php: journal_entry() calls
 // wp_json_encode() and error messages use __().
 
-require '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 if (!class_exists('RestorePilot_Backup_Migration')) {
-  require_once '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+  require_once rp_test_plugin_file();
 }
 
 $failures = [];

@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // The safety net: can a user whose restore failed actually get their site
 // back from the pre-restore rollback point?
 //
@@ -29,10 +31,11 @@ if (PHP_SAPI !== 'cli') {
 // Every other bug in this plugin is survivable BECAUSE the rollback exists,
 // so this file guards the thing the rest of the safety story rests on.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
-const RP_TEST_SOCKET = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
+// define(), not const: a const initialiser cannot call a function.
+define('RP_TEST_SOCKET', rp_test_socket());
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

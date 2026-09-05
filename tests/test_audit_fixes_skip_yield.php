@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for the restore row-skip / table-skip cooperative
 // time-check fix: catching up on already-restored rows (or coasting past
 // already-completed tables) used to have NO time-budget check at all,
@@ -20,7 +22,7 @@ if (PHP_SAPI !== 'cli') {
 // while skipping already-inserted rows, rather than ignoring the deadline
 // entirely and running the whole table to completion regardless.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

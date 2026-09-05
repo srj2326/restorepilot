@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for the bug just hit live: Master Reset's "wipe all
 // uploads" step used to delete wp-content/uploads/restorepilot-backup-
 // migration/ along with everything else — destroying stored backups,
@@ -20,7 +22,7 @@ if (PHP_SAPI !== 'cli') {
 // WITHOUT running the rest of the (much more destructive, DB-truncating)
 // handle_master_reset() flow.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

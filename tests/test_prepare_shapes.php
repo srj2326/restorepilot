@@ -10,10 +10,12 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Exercise WordPress's real wpdb::prepare() (no DB connection needed for
 // prepare() itself) to confirm the %i statements this plugin now builds
 // render into the SQL we intend.
-define('ABSPATH', '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/');
+define('ABSPATH', dirname(rp_test_plugin_dir(), 3) . '/');
 define('WP_DEBUG', false);
 function __($s, $d = null) { return $s; }
 function _doing_it_wrong($f, $m, $v) { echo "  [doing_it_wrong] $f: $m\n"; }

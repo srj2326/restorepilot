@@ -10,14 +10,16 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Sets up the fixture + queued job, then exits — a separate driver script
 // calls run_restore_job() once per real PHP process invocation, matching how
 // production actually dispatches resumptions (each one a fresh process, so
 // maybe_touch_restore_job()'s function-local throttle starts fresh too,
 // unlike a tight in-process loop that shares it across "simulated" calls).
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 require $site_root . '/wp-load.php';
 require_once $plugin_file;
 

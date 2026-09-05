@@ -23,8 +23,8 @@ if (PHP_SAPI !== 'cli') {
  * they are agreeing to.
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 
 $failures = [];
 function check(string $label, bool $ok, string $detail = '') {
@@ -179,7 +179,7 @@ check("WordPress's own index.php guard is left in place", is_file($mu_dir . '/in
 
 // --- The operator can see what they are agreeing to -------------------------
 $src = '';
-foreach (glob('/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/includes/*.php') as $f) {
+foreach (glob(rp_test_plugin_dir() . '/includes/*.php') as $f) {
     $src .= file_get_contents($f);
 }
 check('The confirmation lists the actual filenames, not just a count',

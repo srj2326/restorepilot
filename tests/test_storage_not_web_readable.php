@@ -30,8 +30,8 @@ if (PHP_SAPI !== 'cli') {
  * the move never being the thing that loses a backup.
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 
 $failures = [];
 function check(string $label, bool $ok, string $detail = '') {

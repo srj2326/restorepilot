@@ -18,8 +18,8 @@ if (PHP_SAPI !== 'cli') {
  * password endpoint over real HTTP, the way the page does.
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 
 $SCRATCH = '/private/tmp/claude-501/-Users-surajitroy-Local-Sites-morecalculators-dev-app-public-wp-content-plugins-restorepilot-backup-migration/7f9a6ea2-0e0d-47e3-9219-e411bdf20a00/scratchpad';
 $EMAIL = 'restore-test@example.test';

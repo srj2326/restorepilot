@@ -12,7 +12,12 @@ if (PHP_SAPI !== 'cli') {
 
 require __DIR__ . '/bootstrap.php';
 
-$backup_path = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/uploads/restorepilot-backup-migration/backups/live-test-backup.zip';
+// Hand-run helper: name the archive to restore.
+$backup_path = $argv[1] ?? '';
+if ($backup_path === '' || !is_file($backup_path)) {
+  fwrite(STDERR, "usage: run_restore.php <backup.zip>\n");
+  exit(1);
+}
 
 $ref = new ReflectionMethod('RestorePilot_Backup_Migration', 'perform_restore');
 $ref->setAccessible(true);

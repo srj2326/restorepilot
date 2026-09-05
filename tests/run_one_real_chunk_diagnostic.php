@@ -10,8 +10,10 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 define('WP_CLI', true);
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 add_filter('restorepilot_restore_chunk_seconds', function () { return 240.0; });

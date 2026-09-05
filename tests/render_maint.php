@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 /**
  * Renders render_maintenance_page() to a file so the real markup can be
  * inspected without putting the live site into maintenance mode.
@@ -23,7 +25,7 @@ function __($s, $d = '') { return $s; }
 function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 function esc_attr($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 
-$src = file_get_contents('/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php');
+$src = file_get_contents(rp_test_plugin_file());
 
 // Lift just the one method out of the class and run it standalone.
 $start = strpos($src, 'private static function render_maintenance_page(): void {');

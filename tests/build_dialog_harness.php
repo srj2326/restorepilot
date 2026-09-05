@@ -28,8 +28,8 @@ if (PHP_SAPI !== 'cli') {
  * Usage: build_dialog_harness.php <output-directory>
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 
 $out = isset($argv[1]) ? rtrim($argv[1], '/') : '';
 if ($out === '') { fwrite(STDERR, "usage: build_dialog_harness.php <output-directory>\n"); exit(1); }

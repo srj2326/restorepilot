@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for the "Advanced downloads" partial-archive side of the
 // multi-volume download fix. build_partial_zip() used to open a backup's
 // base file directly through a raw ZipArchive, so a partial download
@@ -28,7 +30,7 @@ if (PHP_SAPI !== 'cli') {
 // Rewritten from the current plugin source rather than reconstructed from
 // memory of whatever its exact prior content was.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

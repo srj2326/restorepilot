@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Focused test of restore_files()'s index-based resumability: back up a
 // tagged test folder under wp-content, delete/corrupt it locally, restore
 // with a small chunk budget so extraction spans several chunks, verify
@@ -30,11 +32,11 @@ if (PHP_SAPI !== 'cli') {
 // plugin. A previous version of this test did exactly that and got stuck
 // forever at files_index=0.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 $runner = __DIR__ . '/run_one_restore_chunk.php';
-$php_bin = '/Users/surajitroy/Library/Application Support/Local/lightning-services/php-8.2.29+0/bin/darwin-arm64/bin/php';
-$sock = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
+$php_bin = rp_test_php();
+$sock = rp_test_socket();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

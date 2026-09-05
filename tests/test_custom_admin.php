@@ -17,8 +17,8 @@ if (PHP_SAPI !== 'cli') {
  * working credential is ever stored or returned anywhere.
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 require_once ABSPATH . 'wp-admin/includes/user.php';
 
 $pass = 0; $fail = 0; $failures = [];
@@ -99,7 +99,7 @@ check('Malformed address produces a valid derived address', (bool) is_email($r4[
 // Read the whole plugin rather than one named file: the code these checks
 // look for lives wherever the current layout puts it, and hardcoding a
 // filename makes the test fail on a refactor that changed nothing.
-$plugin_dir = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration';
+$plugin_dir = rp_test_plugin_dir();
 $src = '';
 $php_files = array_merge(
     glob($plugin_dir . '/*.php') ?: [],

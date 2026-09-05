@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression tests for the locking/retention fixes from the full-plugin
 // audit: (1) enforce_backup_retention() must not run while a restore is
 // active, (2) force_release_restore_locks() must release the worker lock
@@ -18,7 +20,7 @@ if (PHP_SAPI !== 'cli') {
 // restore's own worker lock, and must re-establish the site lock without a
 // delete-then-recreate gap.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

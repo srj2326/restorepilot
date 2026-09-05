@@ -28,8 +28,8 @@ if (PHP_SAPI !== 'cli') {
  * costs a single query.
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 
 if (!class_exists('WooCommerce')) {
     fwrite(STDERR, "  ensure-store: WooCommerce is not active; nothing to do\n");

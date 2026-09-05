@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies the redesigned maintenance-mode gate (should_block_for_maintenance())
 // correctly exempts exactly the requests a resumable restore's own dispatch
 // needs to survive a maintenance window — this is the fix for a real deadlock
@@ -18,7 +20,7 @@ if (PHP_SAPI !== 'cli') {
 // themselves blocked by that same maintenance mode, so it could never finish
 // on its own.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {
@@ -70,8 +72,8 @@ update_option(RestorePilot_Backup_Migration::MAINTENANCE_OPTION, time() + 3600, 
 // Simulate DOING_AJAX via a subprocess, since the real constant can't be
 // unset/changed once defined in this process (and shouldn't be faked with
 // define() here — a genuine wp_doing_ajax() check is what production runs).
-$php_bin = '/Users/surajitroy/Library/Application Support/Local/lightning-services/php-8.2.29+0/bin/darwin-arm64/bin/php';
-$sock = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
+$php_bin = rp_test_php();
+$sock = rp_test_socket();
 
 function run_ajax_scenario($php_bin, $sock, $site_root, $action) {
   $script = <<<PHP

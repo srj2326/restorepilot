@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Regression test for the root cause behind the live restore failure:
 // wp_json_encode() never returns false for invalid-UTF8 binary data (unlike
 // PHP's own json_encode()), so json_fragment()'s old "try raw encode, check
@@ -23,7 +25,7 @@ if (PHP_SAPI !== 'cli') {
 // table where this was found: PRIMARY KEY (IP binary(16), identifier
 // binary(32))).
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

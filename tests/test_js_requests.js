@@ -12,7 +12,11 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const JS = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/assets/js/admin.js';
+const path = require('path');
+// Relative to this file, so the checkout can live anywhere.
+const JS = process.env.RP_PLUGIN_DIR
+  ? path.join(process.env.RP_PLUGIN_DIR, 'assets/js/admin.js')
+  : path.join(__dirname, '..', 'assets', 'js', 'admin.js');
 
 let pass = 0, fail = 0;
 const failures = [];

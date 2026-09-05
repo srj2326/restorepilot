@@ -22,8 +22,8 @@ if (PHP_SAPI !== 'cli') {
  * the fixed one are indistinguishable by reading the code.
  */
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 
 $failures = [];
 function check(string $label, bool $ok, string $detail = '') {
@@ -84,7 +84,7 @@ foreach (['restore', 'backup'] as $kind) {
 // The worker itself must use the fresh form; passing $fresh only where it is
 // harmless would leave the original bug in place.
 $src = '';
-foreach (glob('/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/includes/*.php') as $f) {
+foreach (glob(rp_test_plugin_dir() . '/includes/*.php') as $f) {
     $src .= file_get_contents($f);
 }
 check('run_restore_job re-reads with $fresh after taking the lock',

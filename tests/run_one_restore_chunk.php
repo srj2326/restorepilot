@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Runs exactly ONE restore chunk in its OWN fresh PHP process, invoked by
 // test_resumable_restore_files.php via proc_open() for every simulated
 // chunk. This is deliberate, not an optimization shortcut: maybe_touch_
@@ -28,8 +30,8 @@ if (PHP_SAPI !== 'cli') {
 // itself. Shelling out to a fresh process each time is what actually
 // matches real dispatch.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 // Real chunk dispatch is exempt from the plugin's own maintenance-mode gate
 // via wp_doing_cron() or wp_doing_ajax() (see should_block_for_maintenance())

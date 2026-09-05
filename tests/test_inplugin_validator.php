@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Exercise the REAL plugin methods without booting WordPress, by extracting
 // the class from the plugin file with WP-dependent bootstrap code skipped.
 define('ABSPATH', '/tmp/fake-abspath/');
@@ -26,7 +28,7 @@ function register_activation_hook() {}
 function register_deactivation_hook() {}
 function plugin_basename($f) { return basename(dirname($f)) . '/' . basename($f); }
 
-$src = file_get_contents('/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php');
+$src = file_get_contents(rp_test_plugin_file());
 
 // Keep only the class declaration itself.
 $start = strpos($src, 'final class RestorePilot_Backup_Migration');

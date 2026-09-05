@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Isolated test of the riskiest piece of restore-side resumability: does a
 // job's checkpoint (and its auth token) actually survive
 // purge_foreign_runtime_state(), which unconditionally wipes
@@ -18,8 +20,8 @@ if (PHP_SAPI !== 'cli') {
 // this right after the database swap. No zip/database/files involved here —
 // just the job-record + lock survival mechanics in isolation.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

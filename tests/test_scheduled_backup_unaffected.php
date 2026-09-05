@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Confirms the job_id-less callers (scheduled/cron backup, rollback-point
 // snapshot) are immune to the chunk budget — they have no resumption
 // mechanism, so a yield there would orphan the lock and every volume
@@ -17,8 +19,8 @@ if (PHP_SAPI !== 'cli') {
 // yields constantly on the async job path, these should still complete in
 // one uninterrupted call, exactly like before resumability existed.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {

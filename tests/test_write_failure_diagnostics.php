@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies throw_write_failure() (the new shared diagnostic behind
 // write_stream()/write_file()) actually produces a useful message under a
 // REAL ENOSPC condition, not just one that looks right on paper — this is
@@ -18,7 +20,7 @@ if (PHP_SAPI !== 'cli') {
 // "Could not write backup data during assemble restore upload." with no
 // detail in the log either.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {

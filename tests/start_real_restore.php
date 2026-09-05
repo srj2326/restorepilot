@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Kicks off a REAL restore job on sunhsine-bkp, mirroring handle_ajax_restore()'s
 // internals exactly (same private helpers, same order) rather than going
 // through the public AJAX wrapper — that wrapper ends in wp_send_json_success(),
@@ -21,7 +23,7 @@ if (PHP_SAPI !== 'cli') {
 // mechanism (loopback POST + cron fallback), not blocked the way every test
 // this session deliberately blocked it to drive resumptions manually instead.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$site_root = rp_test_site();
 require $site_root . '/wp-load.php';
 
 function call_private($method, array $args = []) {
@@ -30,9 +32,10 @@ function call_private($method, array $args = []) {
   return $ref->invokeArgs(null, $args);
 }
 
-$backup_path = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-content/uploads/sunshineretirementliving-com-backup-2026-08-20-035630-695478137e25.zip';
-if (!is_file($backup_path)) {
-  fwrite(STDERR, "Backup file not found at expected path.\n");
+// Hand-run helper: name the archive to restore.
+$backup_path = $argv[1] ?? '';
+if ($backup_path === '' || !is_file($backup_path)) {
+  fwrite(STDERR, "usage: start_real_restore.php <backup.zip>\n");
   exit(1);
 }
 

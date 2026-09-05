@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 // Verifies the escape hatch for a restore that has stopped responding.
 //
 // Why this exists: when a restore dies, its job stays status "running", so
@@ -28,8 +30,8 @@ if (PHP_SAPI !== 'cli') {
 // point is to stop the owner being stranded, not to let them browse a site
 // whose database is mid-replacement.
 
-$site_root = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
-$plugin_file = '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+$site_root = rp_test_site();
+$plugin_file = rp_test_plugin_file();
 
 require $site_root . '/wp-load.php';
 if (!class_exists('RestorePilot_Backup_Migration')) {
@@ -126,8 +128,8 @@ check('...even though the lock itself would not release for two hours', call_pri
 // === handle_abandon_restore() =============================================
 // It ends in wp_safe_redirect()+exit, so it is driven in its own process and
 // its EFFECTS are inspected here afterwards.
-$php_bin = '/Users/surajitroy/Library/Application Support/Local/lightning-services/php-8.2.29+0/bin/darwin-arm64/bin/php';
-$sock = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
+$php_bin = rp_test_php();
+$sock = rp_test_socket();
 
 $admin_id = wp_insert_user([
   'user_login' => 'rp_abandon_admin_' . wp_generate_password(6, false, false),
@@ -138,7 +140,7 @@ $admin_id = wp_insert_user([
 check('Test administrator created', !is_wp_error($admin_id));
 
 $runner = sys_get_temp_dir() . '/rp_abandon_runner_' . wp_generate_uuid4() . '.php';
-file_put_contents($runner, <<<'PHP'
+$runner_src = <<<'PHP'
 <?php
 // Set BEFORE wp-load.php on purpose. wp-load fires 'init', which is where
 // maybe_block_for_maintenance() decides whether to render the maintenance
@@ -149,14 +151,15 @@ file_put_contents($runner, <<<'PHP'
 // and the handler under test never ran at all.
 $_POST['action'] = 'restorepilot_abandon_restore';
 
-require '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once '{{ENV}}';
+rp_test_boot();
 // Guarded: the plugin is ACTIVE on this site, so WordPress has already loaded
 // it from the site's own copy. require_once keys on the resolved path, and
 // the dev copy is a different path, so an unguarded require redeclares
 // everything and fatals ("Cannot redeclare restorepilot_backup_migration_
 // bootstrap()"). The two copies are kept byte-identical anyway.
 if (!class_exists('RestorePilot_Backup_Migration')) {
-  require_once '/Users/surajitroy/Local Sites/morecalculators-dev/app/public/wp-content/plugins/restorepilot-backup-migration/restorepilot-backup-migration.php';
+  require_once '{{PLUGIN_FILE}}';
 }
 wp_set_current_user((int) $argv[1]);
 // The nonce can only be minted once WordPress is loaded; the gate above does
@@ -172,7 +175,17 @@ try {
 } catch (Throwable $e) {
   echo 'EXCEPTION: ' . $e->getMessage() . "\n";
 }
-PHP);
+PHP;
+
+// The runner lands in a temp directory, so __DIR__ inside it is not tests/ and
+// the helpers below are not loaded there. Substituted rather than interpolated
+// because the body above is a nowdoc on purpose: it is full of $_POST and
+// $argv that must reach the generated file untouched.
+$runner_src = strtr($runner_src, [
+  '{{ENV}}'         => __DIR__ . '/env.php',
+  '{{PLUGIN_FILE}}' => rp_test_plugin_file(),
+]);
+file_put_contents($runner, $runner_src);
 
 $cmd = sprintf(
   '%s -d %s -d %s %s %d 2>&1',

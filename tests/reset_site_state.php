@@ -10,6 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
+require_once __DIR__ . '/env.php';
+
 /**
  * Returns the test site to a state a test can start from.
  *
@@ -27,8 +29,8 @@ if (PHP_SAPI !== 'cli') {
  *   itself -- the preconditions of the test that is about to run.
  */
 
-$socket = '/Users/surajitroy/Library/Application Support/Local/run/gKsH4-EmV/mysql/mysqld.sock';
-$site   = '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public';
+$socket = rp_test_socket();
+$site   = rp_test_site();
 $self   = 'restorepilot-backup-migration/restorepilot-backup-migration.php';
 
 $db = @new mysqli('localhost', 'root', 'root', 'local', null, $socket);

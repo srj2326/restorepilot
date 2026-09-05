@@ -10,8 +10,8 @@ if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
-define('WP_USE_THEMES', false);
-require_once '/Users/surajitroy/Local Sites/sunhsine-bkp/app/public/wp-load.php';
+require_once __DIR__ . '/env.php';
+rp_test_boot();
 require_once ABSPATH . 'wp-admin/includes/user.php';
 
 $user = get_user_by('login', 'admin_nhdtvg');
