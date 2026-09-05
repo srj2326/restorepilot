@@ -55,6 +55,7 @@ FAST_TESTS=(
   test_restore_row_schema         # a bad row is refused while the restore is still only a plan
   test_documented_claims          # what the readme promises is what the code does
   test_no_dead_guards             # no guard or PHPCS exemption that only looks like one
+  test_dialog_focus               # every modal goes through the one focus controller
 )
 
 if [[ "$1" == "--install" ]]; then

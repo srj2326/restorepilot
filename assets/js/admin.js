@@ -1,3 +1,220 @@
+/* ── Modal dialog controller ──
+ *
+ * Four dialogs in this admin screen each grew their own keyboard handling, and
+ * between them they covered different parts of the same job: two closed on
+ * Escape and two did not, one set initial focus, none contained Tab, none gave
+ * focus back to the control that opened them, and none stopped the page behind
+ * from being reached. A keyboard user could tab straight out of a modal into
+ * the page it was covering, and a screen-reader user could read a form that was
+ * visually obscured.
+ *
+ * So the mechanics live here once, and the dialogs keep their own rules about
+ * what is allowed to close them. This deliberately does not touch showing and
+ * hiding: each dialog already has its own open/close (display, is-active, or
+ * removal from the DOM), and its own acknowledgement and confirmation checks,
+ * which are unchanged. activate() is called once a dialog is visible and
+ * deactivate() once it is not.
+ */
+window.RestorePilotDialog = (function () {
+  var FOCUSABLE = [
+    'a[href]', 'area[href]', 'button', 'input', 'select', 'textarea',
+    'iframe', 'object', 'embed', '[contenteditable]', '[tabindex]'
+  ].join(',');
+
+  // inert removes an element from focus, hit-testing and the accessibility
+  // tree in one attribute. Where it is missing, the Tab trap below still keeps
+  // the keyboard in, and aria-hidden keeps assistive technology out.
+  var supportsInert = ('inert' in document.createElement('div'));
+  var stack = [];
+  var listening = false;
+
+  function isVisible(el) {
+    return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  }
+
+  /** Focusable, in DOM order, as it stands right now.
+   *
+   * Recomputed on every Tab rather than cached at open: these dialogs reveal
+   * and hide fields as checkboxes are ticked (the new-admin fields, the purge
+   * options), so a list captured at open time goes stale while the dialog is
+   * still on screen.
+   */
+  function focusableWithin(root) {
+    return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE), function (el) {
+      if (el.disabled) { return false; }
+      if (el.getAttribute('tabindex') === '-1') { return false; }
+      if (el.type === 'hidden') { return false; }
+      if (el.getAttribute('aria-hidden') === 'true') { return false; }
+      return isVisible(el);
+    });
+  }
+
+  /** Everything outside the dialog, walking up to <body>. */
+  function eachBackgroundSibling(dialog, fn) {
+    var node = dialog;
+    while (node && node !== document.body && node.parentNode) {
+      var parent = node.parentNode;
+      if (parent.children) {
+        Array.prototype.forEach.call(parent.children, function (sib) {
+          if (sib !== node) { fn(sib); }
+        });
+      }
+      node = parent;
+    }
+  }
+
+  function applyInert(dialog) {
+    var touched = [];
+    eachBackgroundSibling(dialog, function (sib) {
+      // Already held by a dialog outside this one; leave it to that one to
+      // release, or the outer dialog's background comes back early.
+      if (sib.hasAttribute('data-rp-inerted')) { return; }
+      sib.setAttribute('data-rp-inerted', '');
+      if (supportsInert) {
+        sib.inert = true;
+      } else if (!sib.hasAttribute('aria-hidden')) {
+        sib.setAttribute('aria-hidden', 'true');
+        sib.setAttribute('data-rp-aria-added', '');
+      }
+      touched.push(sib);
+    });
+    return touched;
+  }
+
+  function releaseInert(touched) {
+    touched.forEach(function (sib) {
+      sib.removeAttribute('data-rp-inerted');
+      if (supportsInert) { sib.inert = false; }
+      if (sib.hasAttribute('data-rp-aria-added')) {
+        sib.removeAttribute('aria-hidden');
+        sib.removeAttribute('data-rp-aria-added');
+      }
+    });
+  }
+
+  function top() {
+    return stack.length ? stack[stack.length - 1] : null;
+  }
+
+  function onKeydown(e) {
+    var handle = top();
+    if (!handle) { return; }
+
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      if (handle.opts.onRequestClose && handle.opts.dismissOnEscape !== false) {
+        e.preventDefault();
+        handle.opts.onRequestClose('escape');
+      }
+      return;
+    }
+
+    if (e.key !== 'Tab') { return; }
+
+    var items = focusableWithin(handle.el);
+    if (!items.length) {
+      e.preventDefault();
+      handle.el.focus();
+      return;
+    }
+    var first  = items[0];
+    var last   = items[items.length - 1];
+    var active = document.activeElement;
+
+    if (!handle.el.contains(active)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+      return;
+    }
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  // Tab is not the only way focus leaves: a click on the page behind reaches
+  // the background wherever inert is unavailable, and returning to the tab
+  // from elsewhere can land focus on <body>.
+  function onFocusIn(e) {
+    var handle = top();
+    if (!handle) { return; }
+    if (handle.el.contains(e.target)) { return; }
+    var items = focusableWithin(handle.el);
+    (items[0] || handle.el).focus();
+  }
+
+  function ensureListening() {
+    if (listening) { return; }
+    listening = true;
+    document.addEventListener('keydown', onKeydown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+  }
+
+  /**
+   * opts:
+   *   initialFocus      function returning the element to focus, optional
+   *   onRequestClose    called with 'escape' or 'backdrop'; without it neither
+   *                     gesture closes anything
+   *   dismissOnEscape   default true when onRequestClose is given
+   *   dismissOnBackdrop default true when onRequestClose is given
+   */
+  function attach(el, opts) {
+    opts = opts || {};
+    var isActive = false;
+    var opener   = null;
+    var touched  = [];
+
+    var handle = {
+      el: el,
+      opts: opts,
+      isActive: function () { return isActive; },
+      activate: function () {
+        if (isActive || !el) { return; }
+        isActive = true;
+        opener = document.activeElement;
+        touched = applyInert(el);
+        // So the dialog itself can hold focus when it contains nothing that can.
+        if (!el.hasAttribute('tabindex')) { el.setAttribute('tabindex', '-1'); }
+        stack.push(handle);
+        ensureListening();
+        // After the frame that made it visible: an element that is still
+        // display:none cannot take focus, and silently does not.
+        window.setTimeout(function () {
+          if (!isActive) { return; }
+          var target = (opts.initialFocus && opts.initialFocus()) || focusableWithin(el)[0] || el;
+          try { target.focus(); } catch (_) {}
+        }, 0);
+      },
+      deactivate: function () {
+        if (!isActive) { return; }
+        isActive = false;
+        var i = stack.indexOf(handle);
+        if (i !== -1) { stack.splice(i, 1); }
+        releaseInert(touched);
+        touched = [];
+        // Back where the user was, so closing a dialog does not drop them at
+        // the top of the page.
+        if (opener && document.contains(opener) && typeof opener.focus === 'function') {
+          try { opener.focus(); } catch (_) {}
+        }
+        opener = null;
+      }
+    };
+
+    if (opts.onRequestClose && opts.dismissOnBackdrop !== false) {
+      el.addEventListener('click', function (e) {
+        if (e.target === el && isActive) { opts.onRequestClose('backdrop'); }
+      });
+    }
+
+    return handle;
+  }
+
+  return { attach: attach, focusableWithin: focusableWithin };
+})();
+
 (function () {
   var tabLinks = document.querySelectorAll('.nav-tab-wrapper .nav-tab');
   var panels = {
@@ -858,14 +1075,29 @@
       }
     } catch (_) {}
 
+    var restoreConfirmDialog = restoreConfirmModal
+      ? window.RestorePilotDialog.attach(restoreConfirmModal, {
+          // Escape and a backdrop click cancel, and cancelling here means the
+          // same as pressing Cancel: the acknowledgement is cleared so it has
+          // to be given again.
+          onRequestClose: function () {
+            resetRestoreConfirmModal();
+            closeRestoreConfirmModal();
+          },
+          initialFocus: function () { return document.getElementById('rp-restore-confirm-check'); }
+        })
+      : null;
+
     function openRestoreConfirmModal() {
       if (restoreConfirmModal) {
         restoreConfirmModal.classList.add('is-active');
+        if (restoreConfirmDialog) { restoreConfirmDialog.activate(); }
       }
     }
     function closeRestoreConfirmModal() {
       if (restoreConfirmModal) {
         restoreConfirmModal.classList.remove('is-active');
+        if (restoreConfirmDialog) { restoreConfirmDialog.deactivate(); }
       }
     }
     document.querySelectorAll('.rp-rollback-restore-btn').forEach(function (btn) {
@@ -1001,14 +1233,6 @@
         // Reset so re-opening the modal requires re-confirming from scratch.
         resetRestoreConfirmModal();
         closeRestoreConfirmModal();
-      });
-    }
-    if (restoreConfirmModal) {
-      restoreConfirmModal.addEventListener('click', function (event) {
-        if (event.target === restoreConfirmModal) {
-          resetRestoreConfirmModal();
-          closeRestoreConfirmModal();
-        }
       });
     }
     if (restoreConfirmContinue) {
@@ -1214,6 +1438,11 @@
   var existingForm = document.getElementById('rp-restore-existing-form');
   if (!modal) return;
 
+  var dlg = window.RestorePilotDialog.attach(modal, {
+    onRequestClose: function () { closeModal(); },
+    initialFocus: function () { return ackBox || cancelBtn; }
+  });
+
   function syncSubmit() {
     if (submitBtn) submitBtn.disabled = !(ackBox && ackBox.checked);
   }
@@ -1229,10 +1458,12 @@
     syncSubmit();
     modal.style.display = 'flex';
     modal.classList.add('is-active');
+    dlg.activate();
   }
   function closeModal() {
     modal.style.display = 'none';
     modal.classList.remove('is-active');
+    dlg.deactivate();
   }
 
   if (ackBox) ackBox.addEventListener('change', syncSubmit);
@@ -1247,12 +1478,6 @@
   });
 
   if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) closeModal();
-  });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modal.classList.contains('is-active')) closeModal();
-  });
   if (existingForm) {
     existingForm.addEventListener('submit', function (event) {
       if (!window.restorepilotQueueRestoreForm) {
@@ -1276,11 +1501,23 @@ document.addEventListener('click', function(e) {
 (function () {
   var close = document.getElementById('rp-restore-success-close');
   var dialog = document.getElementById('rp-restore-success-dialog');
-  if (close && dialog) {
-    close.addEventListener('click', function () {
-      dialog.parentNode.removeChild(dialog);
-    });
+  if (!close || !dialog) { return; }
+
+  // This one is rendered already open, so there is no opener to go back to --
+  // but it is the dialog most likely to be met by a keyboard user, since it
+  // appears on the page a restore lands on.
+  var dlg = window.RestorePilotDialog.attach(dialog, {
+    onRequestClose: function () { dismiss(); },
+    initialFocus: function () { return close; }
+  });
+
+  function dismiss() {
+    dlg.deactivate();
+    if (dialog.parentNode) { dialog.parentNode.removeChild(dialog); }
   }
+
+  close.addEventListener('click', dismiss);
+  dlg.activate();
 })();
 
 /* ── Master Reset modal ── */
@@ -1297,6 +1534,11 @@ document.addEventListener('click', function(e) {
 
   if (!modal || !openBtn) { return; }
 
+  var dlg = window.RestorePilotDialog.attach(modal, {
+    onRequestClose: function () { closeModal(); },
+    initialFocus: function () { return input; }
+  });
+
   function syncConfirmEnabled() {
     if (!confirmBtn) { return; }
     var typedOk = input && input.value === 'RESET';
@@ -1310,23 +1552,16 @@ document.addEventListener('click', function(e) {
     if (errorBox)   { errorBox.style.display = 'none'; }
     syncConfirmEnabled();
     modal.classList.add('is-active');
-    if (input) { setTimeout(function () { input.focus(); }, 60); }
+    dlg.activate();
   }
 
   function closeModal() {
     modal.classList.remove('is-active');
+    dlg.deactivate();
   }
 
   openBtn.addEventListener('click', openModal);
   if (cancelBtn) { cancelBtn.addEventListener('click', closeModal); }
-
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) { closeModal(); }
-  });
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modal.classList.contains('is-active')) { closeModal(); }
-  });
 
   if (input)  { input.addEventListener('input', syncConfirmEnabled); }
   if (ackBox) { ackBox.addEventListener('change', syncConfirmEnabled); }
