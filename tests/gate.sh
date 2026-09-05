@@ -79,6 +79,7 @@ FAST_TESTS=(
   test_storage_lifecycle          # uninstall and Master Reset delete the backups they claim to
   test_durable_restore_state      # the files a restore cannot finish without are written checked
   test_legacy_archive_limit       # an old-format archive too big for this server is refused first
+  test_direct_download_optin      # backups are not left at a public URL nothing checks
 )
 
 if [[ "$1" == "--install" ]]; then

@@ -153,6 +153,16 @@ In a `restorepilot-private-storage` directory next to your WordPress installatio
 
 Either way the folder is excluded from future RestorePilot backups. You can choose the location yourself by defining `RESTOREPILOT_STORAGE_DIR` in `wp-config.php`; a directory you name that way is never deleted by the plugin, including on uninstall.
 
+= Why is a large download slower than it used to be? =
+
+Every download now goes through WordPress, which checks that you are still allowed to have the file on each request. Earlier versions handed very large archives straight to the web server instead, which was faster but meant the download address kept working until a scheduled cleanup removed it — and on sites where WP-Cron is disabled or traffic is low, that could be a long time. A backup contains your whole database, so the link is checked rather than merely deleted later.
+
+Downloads are resumable: if a transfer is interrupted, your browser or download manager can continue it rather than starting again. If your host cuts off long requests and a large download will not complete, split the backup into volumes and fetch the parts, or re-enable the direct route by adding this to `wp-config.php`:
+
+`define('RESTOREPILOT_DIRECT_DOWNLOADS', true);`
+
+That trades the confidentiality of the download link for reliability on a slow host. Turn it on only if you need it.
+
 = Are other backup plugins' files excluded from the backup? =
 
 RestorePilot excludes the *backup archives* created by other plugins (UpdraftPlus, Duplicator, BackupBuddy, WP Staging, etc.) to avoid including huge backup zips inside your backup. The backup plugins *themselves* (their code inside `wp-content/plugins/`) are included normally.

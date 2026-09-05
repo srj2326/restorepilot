@@ -398,7 +398,10 @@ trait RestorePilot_Storage {
     }
 
     $is_full_zip = preg_match('/\.zip$/i', basename($file));
-    if ($action !== 'restorepilot_download_stream' && $is_full_zip && $size > self::PART_SIZE) {
+    if (self::direct_downloads_enabled()
+        && $action !== 'restorepilot_download_stream'
+        && $is_full_zip
+        && $size > self::PART_SIZE) {
       $url = self::create_direct_download_url($file);
       self::write_log('Direct web-server download prepared for: ' . basename($file));
       wp_safe_redirect($url);
@@ -1077,6 +1080,29 @@ trait RestorePilot_Storage {
       }
       self::write_log('Removed old restore rollback point: ' . basename($point['path']));
     }
+  }
+
+  /**
+   * Whether to hand a large archive to the web server instead of streaming it.
+   *
+   * RP-040. The fast path writes the archive to a public URL and relies on a
+   * scheduled cleanup to delete it six hours later. That is not an expiry:
+   * static files are served without WordPress running, so nothing checks
+   * anything at request time. Where WP-Cron is disabled or the site is quiet,
+   * the URL keeps working -- and it downloads the whole database, every
+   * account, every password hash and the site's salts, to anyone who has the
+   * address from browser history, a pasted link or a proxy log.
+   *
+   * So it is off unless an administrator turns it on. The streamed download
+   * that replaces it is checked on every request and honours Range, so a
+   * browser or download manager can still resume an interrupted transfer;
+   * what it cannot always survive is a host that kills long-running PHP, which
+   * is the reason this escape hatch exists at all.
+   *
+   *   define('RESTOREPILOT_DIRECT_DOWNLOADS', true);  // in wp-config.php
+   */
+  private static function direct_downloads_enabled(): bool {
+    return defined('RESTOREPILOT_DIRECT_DOWNLOADS') && RESTOREPILOT_DIRECT_DOWNLOADS === true;
   }
 
   private static function create_direct_download_url(string $file): string {
