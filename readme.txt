@@ -4,7 +4,7 @@ Tags: backup, restore, migration, database backup, site migration
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.5.8
+Stable tag: 0.5.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -209,6 +209,9 @@ RestorePilot stops immediately, removes maintenance mode, and writes the full er
 
 == Changelog ==
 
+= 0.5.9 =
+* Fixed: Master Reset's "also delete stored backups" now actually deletes them. The fix released in 0.5.8 did not work on any site whose backups had been moved out of the uploads directory, which is every site that has run 0.5.7. The reset wipes the plugin's settings before it deletes the backups, and the setting it wipes is the one recording where the backups were moved to — so by the time it went to delete them, nothing knew where they were. It reported success regardless. Uninstall was not affected and has worked since 0.5.8. If you have run a Master Reset with that box ticked since updating to 0.5.8, your backups are still on the server, in a `restorepilot-private-storage` directory beside your WordPress folder; running the reset again on 0.5.9 will remove them, or you can delete that directory yourself.
+
 = 0.5.8 =
 * Fixed: deleting the plugin now removes your stored backups, and Master Reset's "also delete stored backups" now actually deletes them. Moving backups out of the uploads directory in 0.5.7 left both of these looking in the old place, so archives were kept while the plugin said it had removed them. Master Reset even wrote "Stored backups were deleted at the operator's request" into the log while leaving every one of them on disk. A backup contains your whole database, so a copy left behind on a site you have handed over or deleted the plugin from matters. A storage directory you set yourself with `RESTOREPILOT_STORAGE_DIR` is never removed by either, because it is yours rather than the plugin's.
 * Security: large backup downloads are checked on every request instead of being placed at a secret web address that a scheduled cleanup deleted six hours later. Where WP-Cron is disabled or the site is quiet, that address kept working. Downloads are resumable, so an interrupted transfer continues rather than restarting. If your host cuts off long downloads, split the backup into volumes, or add `define('RESTOREPILOT_DIRECT_DOWNLOADS', true);` to `wp-config.php` to restore the old behaviour.
@@ -369,6 +372,9 @@ RestorePilot stops immediately, removes maintenance mode, and writes the full er
 * Initial public release.
 
 == Upgrade Notice ==
+
+= 0.5.9 =
+Fixes Master Reset's "also delete stored backups", which did nothing on sites whose backups had moved out of the uploads directory — meaning any site that has run 0.5.7. It reported success while leaving every backup on disk. Uninstall was not affected.
 
 = 0.5.8 =
 Fixes two ways stored backups were kept when you asked for them to be deleted: uninstalling the plugin, and Master Reset. Large downloads are now checked on each request rather than left at a public address. Restore reliability and dialog keyboard handling improved.
