@@ -66,6 +66,36 @@ $memo = new ReflectionProperty('RestorePilot_Backup_Migration', 'restore_success
 $memo->setAccessible(true);
 $memo->setValue(null, null);
 
+// The restore-from-existing dialog is only rendered when there is a backup to
+// restore from, so the harness needs one to exist. Depending on whatever the
+// fixture happened to be holding made this test fail for a reason that had
+// nothing to do with dialogs: a probe elsewhere deleted the stored backups and
+// the harness quietly lost a quarter of what it exists to exercise.
+$backup_dir = (function () {
+    $m = new ReflectionMethod('RestorePilot_Backup_Migration', 'backup_dir');
+    $m->setAccessible(true);
+    return $m->invoke(null);
+})();
+$ensure = new ReflectionMethod('RestorePilot_Backup_Migration', 'ensure_storage');
+$ensure->setAccessible(true);
+$ensure->invoke(null);
+
+if (!glob($backup_dir . '/*.zip')) {
+    $fixture = $backup_dir . '/harness-fixture-backup.zip';
+    $zip = new ZipArchive();
+    $zip->open($fixture, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+    $zip->addFromString('manifest.json', wp_json_encode([
+        'plugin'      => 'restorepilot-backup-migration',
+        'generator'   => 'RestorePilot',
+        'version'     => '0.5.7',
+        'backup_type' => 'full',
+        'site_url'    => home_url(),
+        'created'     => time(),
+    ]));
+    $zip->close();
+    echo "  seeded a backup so the restore-from-existing dialog renders\n";
+}
+
 ob_start();
 RestorePilot_Backup_Migration::render_admin_page();
 $page = ob_get_clean();
