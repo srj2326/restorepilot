@@ -135,6 +135,64 @@ check('And uploads is still the fallback when it is not writable',
     strpos(file_get_contents($root . '/includes/trait-storage.php'),
         "\$upload = wp_upload_dir(null, false);\n    return trailingslashit(\$upload['basedir']) . 'restorepilot-backup-migration';") !== false);
 
+// ── The one format the streaming claim does not cover ──────────────────────
+// RP-039. "Constant memory use ... not limited by PHP's memory limit" is true
+// of the current format and false of the legacy single-document one, which
+// json_decode() has to build whole. The static 2 GB ceiling was a sanity limit
+// pretending to be a memory limit.
+echo "\n=== legacy archives, which are the exception to that ===\n";
+
+check('readme.txt no longer claims memory independence without qualification',
+    stripos($readme_tx, 'single-document format') !== false
+    && stripos($readme_tx, 'limited by memory') !== false);
+
+check('It says the archive is refused before the site is touched',
+    stripos($readme_tx, 'before touching the site') !== false);
+
+$db_src = file_get_contents($root . '/includes/trait-database.php');
+check('The ceiling is derived from the running memory limit',
+    strpos($db_src, "ini_get('memory_limit')") !== false
+    && strpos($db_src, 'wp_convert_hr_to_bytes') !== false);
+
+// The arithmetic, at limits a real host would use. Run in child processes so
+// the value actually comes from that process's memory_limit.
+foreach (['256M' => 256, '512M' => 512, '2048M' => 2048] as $limit => $mb) {
+    $out = [];
+    exec(rp_test_php_command(__DIR__ . '/report_legacy_ceiling.php', '', 'memory_limit=' . $limit) . ' 2>&1', $out);
+    $ceiling = (int) trim(implode('', $out));
+    $expected = (int) floor(($mb * 1024 * 1024) / 8);
+    check("At memory_limit=$limit the ceiling is a fraction of it, not 2 GB",
+        $ceiling === $expected && $ceiling < 2147483648,
+        sprintf('%s from a %s limit', size_format($ceiling), $limit));
+}
+
+// Unlimited means the original sanity ceiling is the only one that applies.
+$out = [];
+exec(rp_test_php_command(__DIR__ . '/report_legacy_ceiling.php', '', 'memory_limit=-1') . ' 2>&1', $out);
+check('With no memory limit, the sanity ceiling still applies',
+    (int) trim(implode('', $out)) === 2147483648,
+    trim(implode('', $out)));
+
+// And it is checked where it can still refuse safely. Position in the file is
+// not call order -- validate_backup_zip() is defined near the bottom and called
+// near the top, which is how the first version of this check "failed" against
+// perfectly correct code. What matters is where its CALL sits relative to the
+// two irreversible steps.
+$restore_src2 = file_get_contents($root . '/includes/trait-restore.php');
+$validate_call = strpos($restore_src2, 'self::validate_backup_zip($zip, true, true, !$resuming);');
+$rollback_at   = strpos($restore_src2, 'if (!$rollback_created) {');
+$maintenance   = strpos($restore_src2, 'self::enable_maintenance_mode();');
+check('The archive is validated before a rollback point is written',
+    $validate_call !== false && $rollback_at !== false && $validate_call < $rollback_at);
+check('And before maintenance mode is switched on',
+    $validate_call !== false && $maintenance !== false && $validate_call < $maintenance);
+
+// The ceiling check has to be inside that validation, not somewhere later.
+$validator_at = strpos($restore_src2, 'private static function validate_backup_zip(');
+$ceiling_at   = strpos($restore_src2, '$legacy_ceiling = self::legacy_json_ceiling();');
+check('The size ceiling is enforced inside that validation',
+    $validator_at !== false && $ceiling_at !== false && $ceiling_at > $validator_at);
+
 echo "\n" . ($failures ? (count($failures) . ' FAILURE(S): ' . implode('; ', $failures)) : 'ALL CHECKS PASSED') . "\n";
 
 exit(empty($failures) ? 0 : 1);

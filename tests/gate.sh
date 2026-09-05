@@ -78,6 +78,7 @@ FAST_TESTS=(
   test_dialog_focus               # every modal goes through the one focus controller
   test_storage_lifecycle          # uninstall and Master Reset delete the backups they claim to
   test_durable_restore_state      # the files a restore cannot finish without are written checked
+  test_legacy_archive_limit       # an old-format archive too big for this server is refused first
 )
 
 if [[ "$1" == "--install" ]]; then

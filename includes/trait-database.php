@@ -1037,6 +1037,42 @@ trait RestorePilot_Database {
    * prune_finished_job_records() (completed backup/restore job records
    * accumulated indefinitely instead of being pruned).
    */
+  /**
+   * The largest legacy database.json this server can actually decode.
+   *
+   * RP-039. The static 2 GB ceiling was never a memory limit, it was a
+   * sanity limit: it exists to fail a pathological archive predictably. But
+   * the legacy single-document format has to be read whole and handed to
+   * json_decode(), which builds a PHP array several times the size of the
+   * text it came from -- arrays and strings carry per-element overhead that
+   * JSON does not. A 500 MB database.json on a 256 MB memory_limit is a fatal
+   * error part way through a restore, and 2 GB let it through.
+   *
+   * Derived from the running limit rather than guessed, and deliberately
+   * conservative: being told an archive is too large is recoverable, being
+   * killed mid-restore is not. A limit of -1 means unlimited, where the
+   * original ceiling is the only one that applies.
+   */
+  private static function legacy_json_ceiling(): int {
+    $raw = trim((string) ini_get('memory_limit'));
+    if ($raw === '' || $raw === '-1') {
+      return self::MAX_DATABASE_JSON_BYTES;
+    }
+
+    $limit = wp_convert_hr_to_bytes($raw);
+    if ($limit <= 0) {
+      return self::MAX_DATABASE_JSON_BYTES;
+    }
+
+    // A factor of eight, from the decoded footprint of real exports rather
+    // than from theory: the arrays, keys and strings json_decode() produces
+    // run roughly five to seven times the document for row-shaped data, and
+    // the restore needs headroom for everything else it is holding.
+    $ceiling = (int) floor($limit / 8);
+
+    return max(4 * 1024 * 1024, min($ceiling, self::MAX_DATABASE_JSON_BYTES));
+  }
+
   private static function like_prefix_literal(string $prefix): string {
     return "'" . esc_sql(self::wpdb()->esc_like($prefix)) . "%'";
   }

@@ -1235,11 +1235,18 @@ trait RestorePilot_Restore {
       // because this format has to be decoded whole and is therefore bounded
       // by memory rather than disk.
       $database_stat = $zip->stat_name('database.json');
-      if (is_array($database_stat) && (int) ($database_stat['size'] ?? 0) > self::MAX_DATABASE_JSON_BYTES) {
+      // Checked against what this server can decode, not just against the
+      // absolute sanity limit. This runs in preflight, before a rollback point
+      // is written or maintenance mode is turned on, so an archive that cannot
+      // be restored here says so while the site is still untouched.
+      $legacy_ceiling = self::legacy_json_ceiling();
+      if (is_array($database_stat) && (int) ($database_stat['size'] ?? 0) > $legacy_ceiling) {
         throw new RuntimeException(sprintf(
-          /* translators: %s: the maximum size a backup's database export may be */
-          __('Backup database export is larger than the %s RestorePilot allows.', 'restorepilot-backup-migration'),
-          size_format(self::MAX_DATABASE_JSON_BYTES)
+          /* translators: 1: size of the database export in the backup, 2: the largest this server can decode, 3: the server's PHP memory_limit */
+          __('This backup uses the older single-document database format, which has to be read into memory in one piece. Its database export is %1$s, and this server can safely decode about %2$s with a PHP memory limit of %3$s. Raise memory_limit, or take a fresh backup with the current version of RestorePilot, which streams the database instead.', 'restorepilot-backup-migration'),
+          size_format((int) ($database_stat['size'] ?? 0)),
+          size_format($legacy_ceiling),
+          (string) ini_get('memory_limit')
         ));
       }
       if ($include_database && $database_stat === false) {

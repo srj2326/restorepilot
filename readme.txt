@@ -32,7 +32,7 @@ Most backup plugins are tested by how well backups work. Restores get tested les
 
 * Full site backup: database + wp-content files.
 * Split into volumes: a site is limited by free disk space rather than by how large a single file the server allows.
-* Constant memory use: the database is exported and restored as a stream, so database size is not limited by PHP's memory limit.
+* Constant memory use: the database is exported and restored as a stream, so database size is not limited by PHP's memory limit. Backups taken by much older versions used a single-document format that has to be read whole; those are still restorable, but their size is limited by memory, and RestorePilot refuses one it cannot decode before touching the site rather than failing part way.
 * Resumes automatically: if a background backup is interrupted by a host timeout, file collection continues from where it left off. The database export is the exception — it runs as one consistent snapshot and restarts if interrupted, which is the price of every table being read as of the same moment. A scheduled daily backup runs as a single process and does not resume at all.
 * One-click full backup download for restore or migration.
 * Advanced file selection: choose which top-level wp-content folders to include.
