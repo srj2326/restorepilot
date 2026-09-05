@@ -21,8 +21,8 @@ It creates a downloadable backup package containing this site's WordPress databa
 Most backup plugins are tested by how well backups work. Restores get tested less, and that is the moment you actually need one to work.
 
 * **A rollback point before every restore.** RestorePilot saves your current database before it changes anything, and you can restore straight from it if something goes wrong — no separate backup step, no remembering to do it yourself.
-* **Resumes instead of restarting.** A host timeout, a closed browser tab, a slow connection — a backup or restore picks up from exactly where it stopped, including partway through a single large database table, instead of starting the whole thing over.
-* **No size ceiling.** Large sites are split into volumes automatically, so a host's per-file size limit stops being a reason a backup can fail.
+* **Resumes instead of restarting.** A host timeout, a closed browser tab, a slow connection — collecting files and restoring both pick up from where they stopped, and a restore continues partway through a single large database table. The one step that does not resume is the database export inside a backup: it is taken as a single consistent snapshot, which cannot outlive the process that opened it, so if that step is cut short it starts again rather than stitching together tables read at different moments.
+* **Volume splitting for large sites.** Backups are split into volumes automatically, so a host's per-file size limit stops being a reason a backup can fail. Free disk space, rather than file size, becomes the limit.
 * **Nothing leaves your server.** Backups are written to your own WordPress uploads directory. RestorePilot has no cloud storage integration and sends nothing to the plugin author or any third party — see Privacy & data below.
 * **Built for migration, not just backup.** Source and target URLs are detected automatically from the backup itself, with serialized-safe replacement across options, widgets, and post meta — restoring a backup on a different domain does not need a manual search-and-replace pass.
 
@@ -31,9 +31,9 @@ Most backup plugins are tested by how well backups work. Restores get tested les
 **Backup**
 
 * Full site backup: database + wp-content files.
-* No size limit: backups are split into volumes, so a site is limited by free disk space rather than by how large a single file the server allows.
+* Split into volumes: a site is limited by free disk space rather than by how large a single file the server allows.
 * Constant memory use: the database is exported and restored as a stream, so database size is not limited by PHP's memory limit.
-* Resumes automatically: if a background backup is interrupted by a host timeout, it continues from where it left off on the next attempt instead of starting over.
+* Resumes automatically: if a background backup is interrupted by a host timeout, file collection continues from where it left off. The database export is the exception — it runs as one consistent snapshot and restarts if interrupted, which is the price of every table being read as of the same moment. A scheduled daily backup runs as a single process and does not resume at all.
 * One-click full backup download for restore or migration.
 * Advanced file selection: choose which top-level wp-content folders to include.
 * Friendly backup filenames with site name and date/time.
@@ -53,7 +53,7 @@ Most backup plugins are tested by how well backups work. Restores get tested les
 * Serialized-safe URL replacement (handles WordPress options, widgets, post meta).
 * Table prefix mapping between source and target sites.
 * Pre-restore database rollback point for safety.
-* Resumes automatically: if a background restore is interrupted by a host timeout, it continues from where it left off — including partway through a large table — on the next attempt instead of starting over.
+* Resumes automatically: if a background restore is interrupted by a host timeout, it continues from where it left off — including partway through a large table — on the next attempt instead of starting over. Each resumption re-reads the rows it has already written in order to find its place, so a table of several hundred thousand rows restores more slowly the more times it is interrupted.
 * Atomic table swap: new tables are staged before replacing live ones.
 * Maintenance mode during restore, automatically removed on completion or failure.
 * Post-restore success dialog after login.
@@ -171,7 +171,11 @@ You never need to handle the volumes yourself: "Download Full Backup" always giv
 
 = My backup or restore shows "continuing in the background" instead of finishing right away — is that normal? =
 
-Yes. A background backup or restore runs in short chunks rather than one long process, so a host execution-time limit, a proxy or CDN timeout, or anything else that cuts the process short cannot lose progress — the next chunk simply continues from exactly where the last one stopped, including partway through a single large database table during a restore. On a large site this can mean several chunks before the job finishes, which is expected and does not mean anything went wrong. A scheduled (cron) daily backup is unaffected and still runs as a single process.
+Yes. A background backup or restore runs in short chunks rather than one long process, so a host execution-time limit, a proxy or CDN timeout, or anything else that cuts the process short does not lose the work already done — the next chunk continues from where the last one stopped, including partway through a single large database table during a restore. On a large site this can mean several chunks before the job finishes, which is expected and does not mean anything went wrong.
+
+Two things do not resume, and it is better to know which. The database export inside a backup is taken as one consistent snapshot; a database transaction cannot outlive the PHP process that opened it, so if that step is cut short it starts again rather than joining together tables read at different moments. And a scheduled (cron) daily backup runs as a single process throughout, so it does not chunk or resume at all.
+
+A restore also finds its place on each resumption by re-reading the rows it has already written, so a very large single table takes longer the more times the restore is interrupted.
 
 = Can I check a backup before restoring? =
 
