@@ -306,8 +306,12 @@ trait RestorePilot_Restore {
         self::restore_files($zip, $job_id, (int) $validated['file_count'], $files_index, $checkpoint_base);
         $files_done = true;
         self::write_log('wp-content files restored.');
-        // File restore overwrites the storage dir, wiping the poll-token file.
-        // Re-write it from the job record so subsequent status polls keep working.
+        // Rewritten because a file restore can overwrite the storage directory
+        // and take the poll-token file with it. That is only reachable when
+        // storage has fallen back to wp-content/uploads; once it has moved
+        // beside WordPress the file phase cannot touch it. Kept unconditional
+        // because the fallback is a supported configuration, and rewriting a
+        // file that is already correct costs nothing.
         $job_after_files = self::get_restore_job($job_id);
         if (!empty($job_after_files['poll_token'])) {
           self::ensure_storage();

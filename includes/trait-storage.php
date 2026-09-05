@@ -1618,6 +1618,43 @@ trait RestorePilot_Storage {
     return true;
   }
 
+  /**
+   * The URL a request would use to fetch $path, or '' when none exists.
+   *
+   * Only two mappings exist on a WordPress site: the uploads directory, which
+   * has its own base URL and may live outside the install, and anything else
+   * under ABSPATH. A path outside both is not addressable, which is the whole
+   * point of moving backups there.
+   */
+  private static function public_url_for_path(string $path): string {
+    $real = realpath($path);
+    if ($real === false) {
+      return '';
+    }
+    $real = str_replace('\\', '/', $real);
+
+    $upload = wp_upload_dir(null, false);
+    if (empty($upload['error']) && !empty($upload['basedir']) && !empty($upload['baseurl'])) {
+      $base = realpath($upload['basedir']);
+      if ($base !== false) {
+        $base = rtrim(str_replace('\\', '/', $base), '/');
+        if (strpos($real, $base . '/') === 0) {
+          return trailingslashit($upload['baseurl']) . ltrim(substr($real, strlen($base)), '/');
+        }
+      }
+    }
+
+    $abspath = realpath(untrailingslashit(ABSPATH));
+    if ($abspath !== false) {
+      $abspath = rtrim(str_replace('\\', '/', $abspath), '/');
+      if (strpos($real, $abspath . '/') === 0) {
+        return trailingslashit(site_url()) . ltrim(substr($real, strlen($abspath)), '/');
+      }
+    }
+
+    return '';
+  }
+
   private static function storage_is_web_readable(bool $fresh = false): ?bool {
     $cached = get_transient(self::STORAGE_EXPOSURE_TRANSIENT);
     if (!$fresh && $cached !== false) {
@@ -1637,8 +1674,22 @@ trait RestorePilot_Storage {
       return null;
     }
 
-    $upload = wp_upload_dir(null, false);
-    $url = trailingslashit($upload['baseurl']) . 'restorepilot-backup-migration/backups/' . $name;
+    // The URL that would actually serve THIS file, which is not necessarily
+    // one under uploads any more. Building the uploads URL unconditionally --
+    // as this did -- meant that after storage moved, the probe wrote a canary
+    // in one place and asked the web server for another, got the 404 it was
+    // always going to get, and reported "not reachable" without having tested
+    // anything. Right answer for the default private location, wrong answer
+    // for a RESTOREPILOT_STORAGE_DIR that happens to be web-served, which is
+    // exactly the case someone needs to be warned about.
+    $url = self::public_url_for_path($path);
+    if ($url === '') {
+      // No URL maps onto it, so no request can fetch it. That is a stronger
+      // answer than a 404 and does not need an HTTP round trip to establish.
+      @unlink($path);
+      set_transient(self::STORAGE_EXPOSURE_TRANSIENT, 'closed', DAY_IN_SECONDS);
+      return false;
+    }
 
     $response = wp_remote_get($url, [
       'timeout'   => 10,

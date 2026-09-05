@@ -145,6 +145,53 @@ check('It deletes the originals only after switching',
 
 @unlink($moved_to);
 
+// ── The probe has to test the directory it wrote to ────────────────────────
+// It wrote its canary into backup_dir() and then always asked for the uploads
+// URL. Once storage moved those were different places, so it requested a file
+// it had not written, got the 404 it was always going to get, and reported
+// "not reachable" without having tested anything. Correct for the default
+// private location, and dangerously wrong for a RESTOREPILOT_STORAGE_DIR that
+// happens to sit inside the web root -- the one case the answer matters for.
+echo "\n=== the probe asks about the directory it actually wrote to ===\n";
+
+$uploads_dir = trailingslashit($uploads['basedir']) . 'restorepilot-backup-migration';
+check('A path under uploads maps to its uploads URL',
+    priv('public_url_for_path', [$uploads_dir]) === trailingslashit($uploads['baseurl']) . 'restorepilot-backup-migration',
+    priv('public_url_for_path', [$uploads_dir]));
+
+check('A path elsewhere under WordPress maps to a site URL',
+    strpos(priv('public_url_for_path', [ABSPATH . 'wp-admin']), site_url()) === 0);
+
+check('And a path outside the site maps to nothing',
+    priv('public_url_for_path', [priv('private_storage_root')]) === '',
+    'no URL means no request can reach it, which is a stronger answer than a 404');
+
+check('The probe builds its URL from the file it wrote',
+    strpos(file_get_contents(dirname(__DIR__) . '/includes/trait-storage.php'),
+        '$url = self::public_url_for_path($path);') !== false);
+
+// The case the old code could not see: storage deliberately placed somewhere
+// the web server does serve. An operator pointing RESTOREPILOT_STORAGE_DIR at
+// a directory inside wp-content must be told it is reachable, not reassured.
+echo "\n=== storage placed somewhere the web server does serve ===\n";
+$exposed = trailingslashit($uploads['basedir']) . 'rp-exposed-storage-test';
+@mkdir($exposed . '/backups', 0755, true);
+$restore_option = (string) get_option(konst('STORAGE_PATH_OPTION'), '');
+update_option(konst('STORAGE_PATH_OPTION'), $exposed, false);
+delete_transient(konst('STORAGE_EXPOSURE_TRANSIENT'));
+
+$verdict = priv('storage_is_web_readable', [true]);
+check('THE FIX: it is reported as reachable rather than assumed safe',
+    $verdict === $was_exposed,
+    'probe says ' . var_export($verdict, true) . '; this server serves that directory: ' . var_export($was_exposed, true));
+
+foreach (glob($exposed . '/backups/*') ?: [] as $f) { @unlink($f); }
+@rmdir($exposed . '/backups');
+@rmdir($exposed);
+if ($restore_option !== '') { update_option(konst('STORAGE_PATH_OPTION'), $restore_option, false); }
+else { delete_option(konst('STORAGE_PATH_OPTION')); }
+delete_transient(konst('STORAGE_EXPOSURE_TRANSIENT'));
+
 echo "\n" . ($failures ? (count($failures) . ' FAILURE(S): ' . implode('; ', $failures)) : 'ALL CHECKS PASSED') . "\n";
 
 exit(empty($failures) ? 0 : 1);

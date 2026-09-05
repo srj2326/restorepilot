@@ -574,7 +574,7 @@ trait RestorePilot_AdminUi {
                         // no longer existed.
                         ?>
                         <input type="hidden" name="uploaded_backup_path" id="rp-restore-uploaded-path" value="">
-                        <span class="description"><?php echo esc_html__('Only needed if the full backup zip is already sitting inside this site\'s uploads directory (for example, placed there via your host\'s file manager) — this skips uploading it again.', 'restorepilot-backup-migration'); ?></span>
+                        <span class="description"><?php echo esc_html__('Only needed if the full backup zip is already on the server (for example, placed there via your host\'s file manager) — this skips uploading it again. It must be inside this site\'s uploads directory or inside RestorePilot\'s own backup folder, shown on the Status tab.', 'restorepilot-backup-migration'); ?></span>
                       </div>
 
                     </div>
@@ -689,8 +689,8 @@ trait RestorePilot_AdminUi {
                   // password reset as a way in. The password does not travel
                   // — it stays here and is applied in one call once the
                   // restore is done, so it is never written to the job record,
-                  // which is mirrored to a file under uploads to survive the
-                  // database swap.
+                  // which is mirrored to a file in RestorePilot's storage
+                  // directory to survive the database swap.
                   ?>
                   <p class="rp-field">
                     <label for="rp-new-admin-email-input"><?php echo esc_html__('Email address', 'restorepilot-backup-migration'); ?></label>
@@ -897,7 +897,7 @@ trait RestorePilot_AdminUi {
                 <p class="rp-danger-intro"><?php echo esc_html__('Permanently wipe this site back to a clean WordPress installation. Everything listed below is deleted and cannot be recovered.', 'restorepilot-backup-migration'); ?></p>
                 <ul class="rp-danger-list">
                   <li><?php echo esc_html__('All posts, pages, custom post types, and taxonomy terms', 'restorepilot-backup-migration'); ?></li>
-                  <li><?php echo esc_html__('All uploaded media files (wp-content/uploads) — except RestorePilot\'s own stored backups, rollback points, and log, which this reset keeps', 'restorepilot-backup-migration'); ?></li>
+                  <li><?php echo esc_html__('All uploaded media files (wp-content/uploads). RestorePilot\'s own stored backups, rollback points, and log are kept — unless you tick the box to delete them when you confirm, which removes them wherever they are stored', 'restorepilot-backup-migration'); ?></li>
                   <li><?php echo esc_html__('All plugins except RestorePilot', 'restorepilot-backup-migration'); ?></li>
                   <li><?php echo esc_html__('All themes except Twenty Twenty-Five', 'restorepilot-backup-migration'); ?></li>
                   <li><?php echo esc_html__('All user accounts except the current administrator', 'restorepilot-backup-migration'); ?></li>
